@@ -1,0 +1,16 @@
+# OS / filesystem cruft
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+
+# Local PR list files (in case the script is run from this directory
+# with PR_REVIEW_DATA_DIR=. or similar dev configuration)
+prs-unmerged.txt
+prs-merged.txt
+prs-closed.txt
