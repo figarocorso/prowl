@@ -367,11 +367,14 @@ emit_padded() {
 }
 
 # Internal subcommand: re-fetch active PRs only and emit padded rows.
+# If PROWL_ROWS_OUT is set, also persist the raw rows there so the parent
+# review loop can detect newly merged/closed PRs after fzf exits.
 cmd_emit_rows() {
   ensure_files
   local rows; rows=$(mktemp); trap "rm -f '$rows'" RETURN
   (( $(count_entries "$ACTIVE_FILE") > 0 )) && build_rows "$ACTIVE_FILE" "ACTIVE" "$rows"
   emit_padded < "$rows"
+  [[ -n "${PROWL_ROWS_OUT:-}" ]] && cp -- "$rows" "$PROWL_ROWS_OUT"
 }
 
 # Interactive table backed by fzf. Enter → open URL in browser (stays open). r → refresh.
@@ -502,6 +505,7 @@ cmd_review() {
   rows_file="$(mktemp)"
   # shellcheck disable=SC2064
   trap "rm -f '$rows_file'" RETURN
+  export PROWL_ROWS_OUT="$rows_file"
 
   if (( total_active > 0 )); then
     run_build_rows "$ACTIVE_FILE" "ACTIVE" "$rows_file" "Fetching $total_active active PR(s)..."
