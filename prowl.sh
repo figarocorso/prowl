@@ -25,11 +25,13 @@ default_data_dir() {
 }
 DATA_DIR="${PROWL_DATA_DIR:-$(default_data_dir)}"
 
-# Per-file overrides (legacy env vars take precedence over data dir).
+# Per-file overrides.
 resolve_files() {
-  UNMERGED_FILE="${PROWL_UNMERGED:-$DATA_DIR/prs-unmerged.txt}"
-  MERGED_FILE="${PROWL_MERGED:-$DATA_DIR/prs-merged.txt}"
-  CLOSED_FILE="${PROWL_CLOSED:-$DATA_DIR/prs-closed.txt}"
+  ACTIVE_FILE="${PROWL_ACTIVE:-$DATA_DIR/prs-active.txt}"
+  REVIEWED_FILE="${PROWL_REVIEWED:-$DATA_DIR/prs-reviewed.txt}"
+  LEGACY_UNMERGED="$DATA_DIR/prs-unmerged.txt"
+  LEGACY_MERGED="$DATA_DIR/prs-merged.txt"
+  LEGACY_CLOSED="$DATA_DIR/prs-closed.txt"
 }
 resolve_files
 
@@ -92,27 +94,24 @@ usage() {
   local body
   body=$(cat <<EOF
 $(ok 'review')              Query GitHub for every tracked PR and print a table.
-$(ok 'add')                 Add a PR URL to $(info "$(basename "$UNMERGED_FILE")").
+$(ok 'add')                 Track a new PR.
                       Usage: $(basename "$0") add [url]
-$(ok 'clean-merged')        Move merged PRs from $(info "$(basename "$UNMERGED_FILE")") to $(info "$(basename "$MERGED_FILE")").
-$(ok 'clean-closed')        Move closed-but-not-merged PRs from $(info "$(basename "$UNMERGED_FILE")") to $(info "$(basename "$CLOSED_FILE")").
+$(ok 'clean')               Move merged + closed PRs out of the active list into reviewed.
 $(ok 'check-dependencies')  Verify required and optional tools are installed.
 
 $(info 'Global flags:')
-  $(ok '--data-dir <path>')   Directory holding the three list files (created if missing).
+  $(ok '--data-dir <path>')   Directory holding the list files (created if missing).
 
 $(info 'Files (current data dir:') $(ok "$DATA_DIR")$(info '):')
-  $(info "$UNMERGED_FILE")   $(info '# active list')
-  $(info "$MERGED_FILE")     $(info '# archive of merged PRs')
-  $(info "$CLOSED_FILE")     $(info '# archive of closed-without-merge PRs')
+  $(info "$ACTIVE_FILE")     $(info '# active list (open + draft PRs)')
+  $(info "$REVIEWED_FILE")   $(info '# reviewed list (merged + closed PRs)')
 
 $(info 'Line format:') one PR URL per line.
 $(info 'Env overrides:')
   PROWL_DATA_DIR        # default data directory
-  PROWL_UNMERGED        # override individual file path
-  PROWL_MERGED
-  PROWL_CLOSED
-  XDG_DATA_HOME             # honoured for default data dir
+  PROWL_ACTIVE          # override active list path
+  PROWL_REVIEWED        # override reviewed list path
+  XDG_DATA_HOME         # honoured for default data dir
 EOF
 )
   banner "🦉 prowl"
@@ -134,9 +133,8 @@ empty_files_help() {
       "  $(ok "$(basename "$0") add <pr-url>")      $(info '# direct')" \
       "" \
       "$(info 'Or edit the files manually:')" \
-      "  $(info "$UNMERGED_FILE")" \
-      "  $(info "$MERGED_FILE")" \
-      "  $(info "$CLOSED_FILE")"
+      "  $(info "$ACTIVE_FILE")" \
+      "  $(info "$REVIEWED_FILE")"
   else
     cat <<EOF
 All list files are empty.
@@ -146,9 +144,8 @@ Add one with:
   $(basename "$0") add <pr-url>
 
 Or edit the files manually:
-  $UNMERGED_FILE
-  $MERGED_FILE
-  $CLOSED_FILE
+  $ACTIVE_FILE
+  $REVIEWED_FILE
 EOF
   fi
 }
@@ -160,16 +157,31 @@ need() {
 }
 
 ensure_files() {
-  # Create data dir for files that live under DATA_DIR.
   local f
-  for f in "$UNMERGED_FILE" "$MERGED_FILE" "$CLOSED_FILE"; do
+  for f in "$ACTIVE_FILE" "$REVIEWED_FILE"; do
     local d
     d="$(dirname -- "$f")"
     [[ -d "$d" ]] || mkdir -p -- "$d"
   done
-  [[ -f "$UNMERGED_FILE" ]] || : > "$UNMERGED_FILE"
-  [[ -f "$MERGED_FILE" ]]   || : > "$MERGED_FILE"
-  [[ -f "$CLOSED_FILE" ]]   || : > "$CLOSED_FILE"
+
+  # Migrate legacy layout (prs-unmerged + prs-merged + prs-closed) to the new
+  # active/reviewed layout. Idempotent: skips if legacy files are absent.
+  if [[ -f "$LEGACY_UNMERGED" && ! -f "$ACTIVE_FILE" ]]; then
+    mv -- "$LEGACY_UNMERGED" "$ACTIVE_FILE"
+  fi
+  if [[ -f "$LEGACY_MERGED" ]]; then
+    [[ -f "$REVIEWED_FILE" ]] || : > "$REVIEWED_FILE"
+    cat -- "$LEGACY_MERGED" >> "$REVIEWED_FILE"
+    rm -f -- "$LEGACY_MERGED"
+  fi
+  if [[ -f "$LEGACY_CLOSED" ]]; then
+    [[ -f "$REVIEWED_FILE" ]] || : > "$REVIEWED_FILE"
+    cat -- "$LEGACY_CLOSED" >> "$REVIEWED_FILE"
+    rm -f -- "$LEGACY_CLOSED"
+  fi
+
+  [[ -f "$ACTIVE_FILE" ]]   || : > "$ACTIVE_FILE"
+  [[ -f "$REVIEWED_FILE" ]] || : > "$REVIEWED_FILE"
 }
 
 # Echo URL extracted from a stored line (trim, strip legacy "<anything>|" prefix).
@@ -354,12 +366,11 @@ emit_padded() {
   '
 }
 
-# Internal subcommand: re-fetch every tracked PR (UNMERGED + CLOSED) and emit padded rows.
+# Internal subcommand: re-fetch active PRs only and emit padded rows.
 cmd_emit_rows() {
   ensure_files
   local rows; rows=$(mktemp); trap "rm -f '$rows'" RETURN
-  (( $(count_entries "$UNMERGED_FILE") > 0 )) && build_rows "$UNMERGED_FILE" "UNMERGED" "$rows"
-  (( $(count_entries "$CLOSED_FILE")   > 0 )) && build_rows "$CLOSED_FILE"   "CLOSED"   "$rows"
+  (( $(count_entries "$ACTIVE_FILE") > 0 )) && build_rows "$ACTIVE_FILE" "ACTIVE" "$rows"
   emit_padded < "$rows"
 }
 
@@ -388,23 +399,29 @@ fzf_interactive_table() {
   local copy_hint=""
   local copy_bind=()
   if [[ -n "$copier" ]]; then
-    copy_hint=" · c copy URL"
+    copy_hint=$'\033[2m · \033[0m\033[1;33mc\033[0m\033[2m copy\033[0m'
     copy_bind=(--bind "c:execute-silent(printf '%s' {2} | $copier)+bell")
   fi
-  local hints=$'\033[2m↑/↓ navigate · Enter open PR'"${copy_hint}"$' · r refresh · Esc/q quit\033[0m'
+  local sep=$'\033[2m · \033[0m'
+  local hints=$'\033[1;36m↑↓\033[0m\033[2m nav\033[0m'"${sep}"$'\033[1;32m⏎\033[0m\033[2m open\033[0m'"${copy_hint}""${sep}"$'\033[1;31m⌫\033[0m\033[2m delete\033[0m'"${sep}"$'\033[1;35mr\033[0m\033[2m reload\033[0m'"${sep}"$'\033[2mesc quit\033[0m'
   local header="${summary}"$'\n'"${hints}"
   emit_padded < "$file" | \
     fzf --ansi --reverse --info=inline \
-        --height=80% --no-clear \
+        --height=80% \
         --header "$header" \
         --header-lines=1 --header-first \
         --delimiter $'\t' --with-nth=1 \
         --no-multi \
-        --prompt 'PR > ' \
+        --prompt $'\033[1;38;5;212m🦉 \033[0m' \
         --pointer '▶' \
-        --color "prompt:$CYAN,pointer:$PINK,fg+:$GREEN,hl:$YELLOW,hl+:$YELLOW,info:$GREY,header:$CYAN" \
+        --marker '✦' \
+        --color "prompt:$PINK,pointer:$PINK,fg+:$GREEN,hl:$YELLOW,hl+:$YELLOW,info:$GREY,header:$CYAN,border:$PINK,gutter:-1,separator:$GREY" \
+        --no-mouse \
+        --border rounded --border-label " 🦉 prowl " --border-label-pos 3 \
         --bind "enter:execute-silent($opener {2} >/dev/null 2>&1)" \
         ${copy_bind[@]+"${copy_bind[@]}"} \
+        --bind "bspace:execute($self _delete-url {2})+reload($self _emit-rows)+clear-query" \
+        --bind "del:execute($self _delete-url {2})+reload($self _emit-rows)+clear-query" \
         --bind "r:reload($self _emit-rows)" \
         --bind "ctrl-r:reload($self _emit-rows)" \
         >/dev/null || true
@@ -471,11 +488,11 @@ run_build_rows() {
 cmd_review() {
   ensure_files
 
-  local total_unmerged total_closed
-  total_unmerged=$(count_entries "$UNMERGED_FILE")
-  total_closed=$(count_entries "$CLOSED_FILE")
+  local total_active total_reviewed
+  total_active=$(count_entries "$ACTIVE_FILE")
+  total_reviewed=$(count_entries "$REVIEWED_FILE")
 
-  if (( total_unmerged + total_closed == 0 )); then
+  if (( total_active + total_reviewed == 0 )); then
     banner "🦉 prowl" "📋 Reviewing tracked PRs"
     empty_files_help
     return 0
@@ -486,12 +503,13 @@ cmd_review() {
   # shellcheck disable=SC2064
   trap "rm -f '$rows_file'" RETURN
 
-  (( total_unmerged > 0 )) && run_build_rows "$UNMERGED_FILE" "UNMERGED" "$rows_file" "Fetching $total_unmerged active PR(s)..."
-  (( total_closed   > 0 )) && run_build_rows "$CLOSED_FILE"   "CLOSED"   "$rows_file" "Fetching $total_closed archived closed PR(s)..."
+  if (( total_active > 0 )); then
+    run_build_rows "$ACTIVE_FILE" "ACTIVE" "$rows_file" "Fetching $total_active active PR(s)..."
+  fi
 
   if [[ ! -s "$rows_file" ]]; then
-    warn "✗ No data fetched"
-    return 1
+    info "📭 No active PRs to display (${total_reviewed} already reviewed)"
+    return 0
   fi
 
   # Executive summary based on raw GitHub state (col 8).
@@ -500,32 +518,28 @@ cmd_review() {
   n_merged=$(awk -F'\t' '$8=="MERGED" {c++} END{print c+0}' "$rows_file")
   n_closed=$(awk -F'\t' '$8=="CLOSED" {c++} END{print c+0}' "$rows_file")
   n_other=$(awk  -F'\t' '$8!="OPEN" && $8!="MERGED" && $8!="CLOSED" {c++} END{print c+0}' "$rows_file")
+  local total_lifetime
+  total_lifetime=$(( total_active + total_reviewed ))
   local summary
   summary="📊 ${n_open} open · ${n_merged} merged · ${n_closed} closed"
   (( n_other > 0 )) && summary="${summary} · ${n_other} unknown"
-  banner "🦉 prowl" "$summary"
-
-  interactive_table "$rows_file" "🦉 prowl · ${summary}"
-
-  local merged_urls closed_urls
-  merged_urls="$(awk -F'\t' '$9=="UNMERGED" && $8=="MERGED" {print $7}' "$rows_file")"
-  closed_urls="$(awk -F'\t' '$9=="UNMERGED" && $8=="CLOSED" {print $7}' "$rows_file")"
-
-  local merged_count closed_count
-  merged_count=$(printf '%s' "$merged_urls" | grep -c . || true)
-  closed_count=$(printf '%s' "$closed_urls" | grep -c . || true)
-
-  if (( merged_count > 0 )); then
-    info ""
-    if confirm "$merged_count merged PR(s) in the active list. Move them to $(basename "$MERGED_FILE")?"; then
-      move_urls "$UNMERGED_FILE" "$MERGED_FILE" "$merged_urls" "merged"
-    fi
+  summary="${summary} · 📚 ${total_lifetime} tracked (${total_active} active, ${total_reviewed} reviewed)"
+  if ! (( HAS_FZF )) || ! is_tty; then
+    banner "🦉 prowl" "$summary"
   fi
 
-  if (( closed_count > 0 )); then
-    info ""
-    if confirm "$closed_count closed-not-merged PR(s) in the active list. Move them to $(basename "$CLOSED_FILE")?"; then
-      move_urls "$UNMERGED_FILE" "$CLOSED_FILE" "$closed_urls" "closed"
+  interactive_table "$rows_file" "${summary}"
+
+  # Cleanup: PRs in active list that are already merged or closed → move to reviewed.
+  local done_urls done_count
+  done_urls="$(awk -F'\t' '$9=="ACTIVE" && ($8=="MERGED" || $8=="CLOSED") {print $7}' "$rows_file")"
+  done_count=$(printf '%s' "$done_urls" | grep -c . || true)
+
+  if (( done_count > 0 )); then
+    printf '\n'
+    banner "🧹 Cleanup" "$done_count merged/closed PR(s) in active list"
+    if confirm "Move $done_count PR(s) to reviewed?"; then
+      move_urls "$ACTIVE_FILE" "$REVIEWED_FILE" "$done_urls" "reviewed"
     fi
   fi
 }
@@ -550,32 +564,88 @@ move_urls() {
     fi
   done < "$src"
   mv "$tmp" "$src"
-  ok "✓ Moved $moved $what PR(s) to $(basename "$dst"); $kept entry/entries remain in $(basename "$src")"
+  ok "✓ Moved $moved $what PR(s) to reviewed; $kept active entry/entries remain"
   while IFS= read -r url; do [[ -n "$url" ]] && info "  → $url"; done <<<"$urls"
 }
 
-cmd_clean_merged() {
+cmd_clean() {
   ensure_files
-  local total; total=$(count_entries "$UNMERGED_FILE")
-  if (( total == 0 )); then warn "No entries in $(basename "$UNMERGED_FILE")"; return 0; fi
+  local total; total=$(count_entries "$ACTIVE_FILE")
+  if (( total == 0 )); then warn "No active PRs tracked"; return 0; fi
   local rows; rows="$(mktemp)"; trap "rm -f '$rows'" RETURN
-  run_build_rows "$UNMERGED_FILE" "UNMERGED" "$rows" "Checking $total PR(s)..."
-  local urls; urls="$(awk -F'\t' '$8=="MERGED" {print $7}' "$rows")"
+  run_build_rows "$ACTIVE_FILE" "ACTIVE" "$rows" "Checking $total PR(s)..."
+  local urls; urls="$(awk -F'\t' '$8=="MERGED" || $8=="CLOSED" {print $7}' "$rows")"
   local n; n=$(printf '%s' "$urls" | grep -c . || true)
-  if (( n == 0 )); then ok "✓ No merged PRs to move"; return 0; fi
-  move_urls "$UNMERGED_FILE" "$MERGED_FILE" "$urls" "merged"
+  if (( n == 0 )); then ok "✓ No merged/closed PRs to move"; return 0; fi
+  move_urls "$ACTIVE_FILE" "$REVIEWED_FILE" "$urls" "reviewed"
 }
 
-cmd_clean_closed() {
+# Bulk delete: remove lines whose URL is in $2 (newline-separated) from $1.
+# $3 = adjective for log message.
+delete_urls_from() {
+  local file="$1" urls="$2" what="$3"
   ensure_files
-  local total; total=$(count_entries "$UNMERGED_FILE")
-  if (( total == 0 )); then warn "No entries in $(basename "$UNMERGED_FILE")"; return 0; fi
-  local rows; rows="$(mktemp)"; trap "rm -f '$rows'" RETURN
-  run_build_rows "$UNMERGED_FILE" "UNMERGED" "$rows" "Checking $total PR(s)..."
-  local urls; urls="$(awk -F'\t' '$8=="CLOSED" {print $7}' "$rows")"
-  local n; n=$(printf '%s' "$urls" | grep -c . || true)
-  if (( n == 0 )); then ok "✓ No closed-not-merged PRs to move"; return 0; fi
-  move_urls "$UNMERGED_FILE" "$CLOSED_FILE" "$urls" "closed"
+  local tmp; tmp="$(mktemp)"
+  local kept=0 removed=0 line url
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ -z "${line//[[:space:]]/}" || "${line#"${line%%[![:space:]]*}"}" == \#* ]]; then
+      printf '%s\n' "$line" >> "$tmp"; continue
+    fi
+    url="$(line_url "$line")"
+    if printf '%s\n' "$urls" | grep -Fxq -- "$url"; then
+      removed=$((removed+1))
+    else
+      printf '%s\n' "$line" >> "$tmp"; kept=$((kept+1))
+    fi
+  done < "$file"
+  mv "$tmp" "$file"
+  ok "✓ Deleted $removed $what PR(s); $kept entry/entries remain"
+  while IFS= read -r url; do [[ -n "$url" ]] && info "  ✗ $url"; done <<<"$urls"
+}
+
+# Remove every line whose URL equals $2 from file $1. Echoes count removed.
+delete_url_from() {
+  local file="$1" target="$2"
+  local tmp; tmp="$(mktemp)"
+  local removed=0 line url
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ -z "${line//[[:space:]]/}" || "${line#"${line%%[![:space:]]*}"}" == \#* ]]; then
+      printf '%s\n' "$line" >> "$tmp"; continue
+    fi
+    url="$(line_url "$line")"
+    if [[ "$url" == "$target" ]]; then
+      removed=$((removed+1))
+    else
+      printf '%s\n' "$line" >> "$tmp"
+    fi
+  done < "$file"
+  mv "$tmp" "$file"
+  printf '%s' "$removed"
+}
+
+cmd_delete_url() {
+  local url="${1:-}"
+  [[ -z "$url" ]] && { printf '✗ No URL provided\n' >&2; exit 1; }
+  ensure_files
+  local ans
+  printf '\033[1;33m? Delete \033[0;36m%s\033[1;33m permanently? [y/N] \033[0m' "$url"
+  read -r ans
+  if [[ ! "$ans" =~ ^[Yy] ]]; then
+    printf '\033[2m  Cancelled: %s\033[0m\n' "$url"
+    sleep 0.4
+    return 0
+  fi
+  local f total=0 n
+  for f in "$ACTIVE_FILE" "$REVIEWED_FILE"; do
+    n=$(delete_url_from "$f" "$url")
+    total=$((total + n))
+  done
+  if (( total > 0 )); then
+    printf '\033[1;32m✓ Deleted %s (%d removed)\033[0m\n' "$url" "$total"
+  else
+    printf '\033[1;33m⚠ Not found: %s\033[0m\n' "$url"
+  fi
+  sleep 0.4
 }
 
 add_one() {
@@ -585,18 +655,17 @@ add_one() {
     err "✗ Not a GitHub PR URL: $url"; return 1
   fi
   url="${BASH_REMATCH[1]}"
-  if grep -Fxq "$url" "$UNMERGED_FILE" 2>/dev/null \
-     || grep -Fxq "$url" "$MERGED_FILE" 2>/dev/null \
-     || grep -Fxq "$url" "$CLOSED_FILE" 2>/dev/null; then
+  if grep -Fxq "$url" "$ACTIVE_FILE" 2>/dev/null \
+     || grep -Fxq "$url" "$REVIEWED_FILE" 2>/dev/null; then
     warn "⚠ Already tracked: $url"; return 1
   fi
-  printf '%s\n' "$url" >> "$UNMERGED_FILE"
+  printf '%s\n' "$url" >> "$ACTIVE_FILE"
   ok "✓ Added: $url"
 }
 
 cmd_add() {
   ensure_files
-  banner "➕ prowl" "Add PR(s) to $(basename "$UNMERGED_FILE")"
+  banner "➕ prowl" "Track new PR(s)"
 
   local added=0
 
@@ -621,7 +690,7 @@ cmd_add() {
   if (( count == 0 )); then
     info "No PRs added."
   else
-    ok "✓ Added $count PR(s) to $(basename "$UNMERGED_FILE")"
+    ok "✓ Tracking $count new PR(s)"
     info ""
     cmd_review
   fi
@@ -806,9 +875,9 @@ main() {
   case "$1" in
     review)         shift; cmd_review "$@" ;;
     add)            shift; cmd_add "$@" ;;
-    clean-merged)   shift; cmd_clean_merged "$@" ;;
-    clean-closed)   shift; cmd_clean_closed "$@" ;;
+    clean)          shift; cmd_clean "$@" ;;
     _emit-rows)     shift; cmd_emit_rows "$@" ;;
+    _delete-url)    shift; cmd_delete_url "$@" ;;
     *) err "Unknown command: $1"; usage; exit 1 ;;
   esac
 }
