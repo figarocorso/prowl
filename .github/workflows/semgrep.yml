@@ -1,0 +1,26 @@
+name: semgrep
+
+on:
+  pull_request:
+  schedule:
+    # Monday 06:30 UTC — offset from any other weekly cron to avoid contention.
+    - cron: "30 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          # Fail the workflow on any finding.
+          config: >-
+            p/ci
+            p/golang
+            p/security-audit

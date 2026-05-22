@@ -110,6 +110,7 @@ Optional:
 
 ```sh
 prowl                                       # interactive TUI
+prowl watch [--interval 30s]                # TUI + periodic auto-refresh
 prowl list                                  # plain table on stdout
 prowl list --json                           # JSON array (agent-friendly)
 prowl list --open                           # only currently-open PRs
@@ -121,6 +122,19 @@ prowl get <url> [--json]                    # single-PR detail
 prowl check                                 # environment / auth / data dir
 prowl version
 ```
+
+### Watch mode
+
+`prowl watch` opens the same TUI as `prowl` but re-fetches the active PR list
+on a timer, so a long-running window stays current without you pressing `r`.
+
+```sh
+prowl watch                 # default: refresh every 30s
+prowl watch --interval 1m   # custom cadence (minimum 5s to spare GitHub)
+```
+
+Press `q` or `Ctrl-C` to exit. The default 30s balances staying fresh against
+the GitHub API rate limit; intervals below 5s are rejected.
 
 Output styling: human terminals get colored, emoji-prefixed output. Pipes,
 `NO_COLOR=1`, and `--plain` (alias `--no-color`) force ASCII-only output that
@@ -150,6 +164,18 @@ Priority (highest to lowest):
 
 Individual file paths can also be overridden via `PROWL_ACTIVE` and
 `PROWL_REVIEWED`.
+
+### Profiles
+
+Use `--profile <name>` (or `PROWL_PROFILE=<name>`) to keep PRs from different
+contexts in separate subdirectories of the data dir (e.g. `work` vs
+`personal`). When unset, prowl uses the base data dir unchanged so existing
+setups keep working.
+
+```sh
+prowl --profile work add https://github.com/acme/api/pull/1234
+PROWL_PROFILE=personal prowl list
+```
 
 ### Optional config file
 

@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/table"
@@ -14,6 +15,9 @@ import (
 	"github.com/figarocorso/prowl/internal/data"
 	"github.com/figarocorso/prowl/internal/store"
 )
+
+// autoRefreshTickMsg fires every refreshInterval to trigger a background fetch.
+type autoRefreshTickMsg time.Time
 
 var (
 	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
@@ -60,21 +64,43 @@ func queueEmojiLabel(label string) string {
 
 // Model is the Bubble Tea state for prowl's TUI.
 type Model struct {
-	cfg            *config.Config
-	store          *store.Store
-	client         data.PRClient
-	table          table.Model
-	spinner        spinner.Model
-	rows           []data.Result
-	loading        bool
-	status         string
-	err            string
-	width          int
-	height         int
-	confirmArchive bool
-	pendingArchive []string
-	confirmDelete  bool
-	pendingDelete  string
+	cfg             *config.Config
+	store           *store.Store
+	client          data.PRClient
+	table           table.Model
+	spinner         spinner.Model
+	rows            []data.Result
+	loading         bool
+	status          string
+	err             string
+	width           int
+	height          int
+	confirmArchive  bool
+	pendingArchive  []string
+	confirmDelete   bool
+	pendingDelete   string
+	refreshInterval time.Duration
+}
+
+// SetRefreshInterval enables `prowl watch`-style auto-refresh by scheduling
+// a background fetch every d. A non-positive d disables auto-refresh.
+func (m *Model) SetRefreshInterval(d time.Duration) {
+	if d <= 0 {
+		m.refreshInterval = 0
+		return
+	}
+	m.refreshInterval = d
+}
+
+// autoRefreshCmd schedules the next auto-refresh tick. Returns nil when
+// auto-refresh is disabled so callers can compose it unconditionally.
+func (m *Model) autoRefreshCmd() tea.Cmd {
+	if m.refreshInterval <= 0 {
+		return nil
+	}
+	return tea.Tick(m.refreshInterval, func(t time.Time) tea.Msg {
+		return autoRefreshTickMsg(t)
+	})
 }
 
 // New builds an unstarted Model.
@@ -124,7 +150,11 @@ func tableColumns() []table.Column {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
+	cmds := []tea.Cmd{m.spinner.Tick, fetchActiveCmd(m.store, m.client)}
+	if tick := m.autoRefreshCmd(); tick != nil {
+		cmds = append(cmds, tick)
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -140,6 +170,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case rowsReadyMsg:
 		m.handleRowsReady(msg)
 		return m, nil
+	case autoRefreshTickMsg:
+		return m, m.handleAutoRefresh()
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -193,6 +225,14 @@ func (m *Model) handleDeleteConfirm(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.status = "Removed " + url
+		kept := m.rows[:0:0]
+		for _, r := range m.rows {
+			if r.URL != url {
+				kept = append(kept, r)
+			}
+		}
+		m.rows = kept
+		m.table.SetRows(rowsToTableRows(m.rows))
 		m.loading = true
 		return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
 	case "n", "N", "esc":
@@ -202,6 +242,21 @@ func (m *Model) handleDeleteConfirm(key string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// handleAutoRefresh re-arms the auto-refresh tick and, when idle, kicks
+// off a background fetch. Returns the next tea.Cmd to run.
+func (m *Model) handleAutoRefresh() tea.Cmd {
+	next := m.autoRefreshCmd()
+	if next == nil {
+		return nil
+	}
+	if m.loading || m.confirmArchive || m.confirmDelete {
+		return next
+	}
+	m.loading = true
+	m.status = "Auto-refreshing…"
+	return tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client), next)
 }
 
 func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
