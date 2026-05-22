@@ -12,8 +12,8 @@ import (
 )
 
 // Run boots the TUI against the real config + store + GitHub client.
-func Run(dataDir string) error {
-	cfg, err := config.Load(dataDir)
+func Run(dataDir, profile string) error {
+	cfg, err := config.Load(dataDir, profile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

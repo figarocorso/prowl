@@ -58,7 +58,7 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 		printOptional(out, plain, "clipboard", "no pbcopy/wl-copy/xclip/xsel; copy disabled")
 	}
 
-	cfg, err := config.Load(dataDir)
+	cfg, err := config.Load(dataDir, profile)
 	if err != nil {
 		printMissing(out, plain, "data dir", err.Error())
 		missing++
