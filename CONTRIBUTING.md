@@ -56,7 +56,9 @@ only appears when the PR changes `.go` files.
 
 This repo uses [Lefthook](https://lefthook.dev) (config: `lefthook.yml`):
 
-- **pre-commit** — `gofmt`, `go vet`, `golangci-lint`
+- **pre-commit** — `gofmt`, `goimports`, `go vet`, `golangci-lint` (full +
+  new-only), `go test -short`, `shellcheck`, `gitleaks`
+- **commit-msg** — Conventional Commits via `commitlint` (with regex fallback)
 - **pre-push** — `go test -race` + coverage threshold check
 
 Install once:
@@ -66,10 +68,23 @@ brew install lefthook   # or: go install github.com/evilmartians/lefthook@latest
 task install-hooks      # runs `lefthook install`
 ```
 
-`golangci-lint` must also be on your `PATH` for the pre-commit hook:
+`golangci-lint` must be on your `PATH` for the pre-commit hook:
 
 ```sh
 go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+```
+
+### Optional tools
+
+The remaining hooks soft-fail (warn, exit 0) when their tool is missing so
+contributors aren't blocked locally — CI is the hard gate. Install whichever
+you want to run pre-commit:
+
+```sh
+go install golang.org/x/tools/cmd/goimports@latest   # missing/extra imports
+brew install shellcheck                              # shell script lint
+brew install gitleaks                                # secret scanning
+brew install node                                    # commitlint via npx
 ```
 
 ## Releasing
