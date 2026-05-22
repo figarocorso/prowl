@@ -29,20 +29,16 @@ linters:
       # Excluded rules and rationale:
       #   G104 — unhandled errors; overlaps with errcheck.
       #   G204 — subprocess with variable args; unavoidable for a CLI that
-      #          shells out to `gh`, `open`, `xdg-open`, etc.
-      #   G301/G302/G306 — file/dir permissions; this is a user-facing CLI
-      #          that writes config + PR lists under $HOME, where 0o644/0o755
-      #          is the expected default. A hardening pass (separate work) can
-      #          tighten these.
+      #          shells out to `gh`, `open`, `xdg-open`, etc. with URL args.
       #   G304 — file path from variable; unavoidable for a CLI that reads
       #          user-supplied config paths.
+      # G301/G302/G306 were excluded historically when prowl wrote with
+      # 0o644/0o755 perms. Files/dirs are now owner-only (0o600/0o700), so
+      # the rules are re-enabled to keep us honest.
       excludes:
         - G104
         - G204
-        - G301
-        - G302
         - G304
-        - G306
 
 formatters:
   enable:

@@ -61,7 +61,7 @@ func TestLoadFileOverrides(t *testing.T) {
 	t.Setenv("PROWL_REVIEWED", "")
 
 	cfgPath := filepath.Join(dir, "config.yml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte("refresh_interval: 1m\ncolumns:\n  - PR\n  - URL\n"), 0o644))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("refresh_interval: 1m\ncolumns:\n  - PR\n  - URL\n"), 0o600))
 	t.Setenv("PROWL_CONFIG", cfgPath)
 
 	cfg, err := Load("", "")
@@ -73,7 +73,7 @@ func TestLoadFileOverrides(t *testing.T) {
 func TestLoadFileInvalidDuration(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yml")
-	require.NoError(t, os.WriteFile(cfgPath, []byte("refresh_interval: garbage\n"), 0o644))
+	require.NoError(t, os.WriteFile(cfgPath, []byte("refresh_interval: garbage\n"), 0o600))
 	t.Setenv("PROWL_DATA_DIR", dir)
 	t.Setenv("PROWL_CONFIG", cfgPath)
 
