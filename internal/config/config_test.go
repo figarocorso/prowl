@@ -19,7 +19,7 @@ func TestLoadCLIWins(t *testing.T) {
 	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
 
 	cli := filepath.Join(dir, "cli")
-	cfg, err := Load(cli)
+	cfg, err := Load(cli, "")
 	require.NoError(t, err)
 	assert.Equal(t, cli, cfg.Paths.DataDir)
 	assert.Equal(t, filepath.Join(cli, "prs-active.txt"), cfg.Paths.ActiveFile)
@@ -35,7 +35,7 @@ func TestLoadEnvFallback(t *testing.T) {
 	t.Setenv("PROWL_REVIEWED", "")
 	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
 
-	cfg, err := Load("")
+	cfg, err := Load("", "")
 	require.NoError(t, err)
 	assert.Equal(t, env, cfg.Paths.DataDir)
 }
@@ -49,7 +49,7 @@ func TestLoadXDGFallback(t *testing.T) {
 	t.Setenv("PROWL_REVIEWED", "")
 	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
 
-	cfg, err := Load("")
+	cfg, err := Load("", "")
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(xdg, "prowl"), cfg.Paths.DataDir)
 }
@@ -64,7 +64,7 @@ func TestLoadFileOverrides(t *testing.T) {
 	require.NoError(t, os.WriteFile(cfgPath, []byte("refresh_interval: 1m\ncolumns:\n  - PR\n  - URL\n"), 0o644))
 	t.Setenv("PROWL_CONFIG", cfgPath)
 
-	cfg, err := Load("")
+	cfg, err := Load("", "")
 	require.NoError(t, err)
 	assert.Equal(t, time.Minute, cfg.RefreshInterval)
 	assert.Equal(t, []string{"PR", "URL"}, cfg.Columns)
@@ -77,7 +77,7 @@ func TestLoadFileInvalidDuration(t *testing.T) {
 	t.Setenv("PROWL_DATA_DIR", dir)
 	t.Setenv("PROWL_CONFIG", cfgPath)
 
-	_, err := Load("")
+	_, err := Load("", "")
 	require.Error(t, err)
 }
 
@@ -90,8 +90,64 @@ func TestActiveReviewedEnvOverrides(t *testing.T) {
 	t.Setenv("PROWL_REVIEWED", reviewed)
 	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
 
-	cfg, err := Load("")
+	cfg, err := Load("", "")
 	require.NoError(t, err)
 	assert.Equal(t, active, cfg.Paths.ActiveFile)
 	assert.Equal(t, reviewed, cfg.Paths.ReviewedFile)
+}
+
+func TestProfileEmptyKeepsBaseDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PROWL_DATA_DIR", dir)
+	t.Setenv("PROWL_PROFILE", "")
+	t.Setenv("PROWL_ACTIVE", "")
+	t.Setenv("PROWL_REVIEWED", "")
+	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
+
+	cfg, err := Load("", "")
+	require.NoError(t, err)
+	assert.Equal(t, dir, cfg.Paths.DataDir)
+	assert.Equal(t, filepath.Join(dir, "prs-active.txt"), cfg.Paths.ActiveFile)
+}
+
+func TestProfileFlagAppendsSubdir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PROWL_DATA_DIR", dir)
+	t.Setenv("PROWL_PROFILE", "")
+	t.Setenv("PROWL_ACTIVE", "")
+	t.Setenv("PROWL_REVIEWED", "")
+	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
+
+	cfg, err := Load("", "work")
+	require.NoError(t, err)
+	want := filepath.Join(dir, "work")
+	assert.Equal(t, want, cfg.Paths.DataDir)
+	assert.Equal(t, filepath.Join(want, "prs-active.txt"), cfg.Paths.ActiveFile)
+	assert.Equal(t, filepath.Join(want, "prs-reviewed.txt"), cfg.Paths.ReviewedFile)
+}
+
+func TestProfileEnvAppendsSubdir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PROWL_DATA_DIR", dir)
+	t.Setenv("PROWL_PROFILE", "personal")
+	t.Setenv("PROWL_ACTIVE", "")
+	t.Setenv("PROWL_REVIEWED", "")
+	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
+
+	cfg, err := Load("", "")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "personal"), cfg.Paths.DataDir)
+}
+
+func TestProfileFlagWinsOverEnv(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PROWL_DATA_DIR", dir)
+	t.Setenv("PROWL_PROFILE", "personal")
+	t.Setenv("PROWL_ACTIVE", "")
+	t.Setenv("PROWL_REVIEWED", "")
+	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
+
+	cfg, err := Load("", "work")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(dir, "work"), cfg.Paths.DataDir)
 }

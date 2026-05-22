@@ -36,9 +36,11 @@ type fileConfig struct {
 
 // Load resolves the data directory and (optionally) reads a YAML config.
 // cliDataDir wins if non-empty; otherwise PROWL_DATA_DIR, then XDG_DATA_HOME/prowl,
-// then ~/.local/share/prowl.
-func Load(cliDataDir string) (*Config, error) {
-	paths, err := resolvePaths(cliDataDir)
+// then ~/.local/share/prowl. When cliProfile (or PROWL_PROFILE) is non-empty,
+// the resolved data dir gets that profile appended as a subdirectory so users
+// can keep, e.g., work and personal PRs separate.
+func Load(cliDataDir, cliProfile string) (*Config, error) {
+	paths, err := resolvePaths(cliDataDir, cliProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +55,7 @@ func Load(cliDataDir string) (*Config, error) {
 	return cfg, nil
 }
 
-func resolvePaths(cliDataDir string) (Paths, error) {
+func resolvePaths(cliDataDir, cliProfile string) (Paths, error) {
 	dir := cliDataDir
 	if dir == "" {
 		dir = os.Getenv("PROWL_DATA_DIR")
@@ -70,10 +72,20 @@ func resolvePaths(cliDataDir string) (Paths, error) {
 		}
 		dir = filepath.Join(home, ".local", "share", "prowl")
 	}
+	if profile := resolveProfile(cliProfile); profile != "" {
+		dir = filepath.Join(dir, profile)
+	}
 	p := Paths{DataDir: dir}
 	p.ActiveFile = override("PROWL_ACTIVE", filepath.Join(dir, "prs-active.txt"))
 	p.ReviewedFile = override("PROWL_REVIEWED", filepath.Join(dir, "prs-reviewed.txt"))
 	return p, nil
+}
+
+func resolveProfile(cliProfile string) string {
+	if cliProfile != "" {
+		return cliProfile
+	}
+	return os.Getenv("PROWL_PROFILE")
 }
 
 func override(env, fallback string) string {
