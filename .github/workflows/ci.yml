@@ -98,8 +98,8 @@ jobs:
       # Thresholds are intentionally above current hotspots so this job acts as
       # a regression gate, not an instant-fail. As of this PR, the worst
       # offenders are:
-      #   gocyclo:  tui.(*Model).Update = 26, mcp.toolListPRs = 16
-      #   gocognit: tui.(*Model).Update = 45, cmd.renderTable = 27
+      #   gocyclo:  mcp.toolListPRs = 16, cmd.renderTable = 15
+      #   gocognit: cmd.renderTable = 27, mcp.toolListPRs = 21
       # Tighten these once those functions are decomposed.
       - name: install gocyclo / gocognit
         run: |
