@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/figarocorso/prowl/internal/data"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -34,11 +35,13 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		args = readURLsFromStdin(cmd.InOrStdin(), cmd.OutOrStderr())
 	}
 
+	plainErr := ui.IsPlain(cmd.OutOrStderr())
+	plainOut := ui.IsPlain(cmd.OutOrStdout())
 	added := 0
 	for _, raw := range args {
 		canonical, err := data.CanonicalURL(strings.TrimSpace(raw))
 		if err != nil {
-			fmt.Fprintf(cmd.OutOrStderr(), "✗ %s\n", err)
+			fmt.Fprintf(cmd.OutOrStderr(), "%s %s\n", ui.Err(plainErr), err)
 			continue
 		}
 		ok, err := store.Add(canonical)
@@ -46,10 +49,10 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if !ok {
-			fmt.Fprintf(cmd.OutOrStderr(), "⚠ already tracked: %s\n", canonical)
+			fmt.Fprintf(cmd.OutOrStderr(), "%s already tracked: %s\n", ui.Warn(plainErr), canonical)
 			continue
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ added: %s\n", canonical)
+		fmt.Fprintf(cmd.OutOrStdout(), "%s added: %s\n", ui.OK(plainOut), canonical)
 		added++
 	}
 	if added == 0 {

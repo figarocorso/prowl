@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/figarocorso/prowl/internal/data"
 	"github.com/figarocorso/prowl/internal/store"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,12 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if len(urls) == 0 {
-		fmt.Fprintln(cmd.OutOrStderr(), "📭 no PRs to list")
+		plain := ui.IsPlain(cmd.OutOrStderr())
+		if plain {
+			fmt.Fprintln(cmd.OutOrStderr(), "no PRs to list")
+		} else {
+			fmt.Fprintln(cmd.OutOrStderr(), "📭 no PRs to list")
+		}
 		return nil
 	}
 	client, err := clientFactory()
@@ -94,29 +100,76 @@ func filterOpen(in []data.Result) []data.Result {
 }
 
 func renderTable(out io.Writer, results []data.Result) error {
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PR\tAssignee\tStatus\tQueue\tPos\tETA\tURL")
-	for _, r := range results {
-		if r.Err != nil {
-			fmt.Fprintf(tw, "?\t-\terror\t-\t-\t-\t%s\n", r.URL)
-			continue
-		}
-		pr := r.PR
-		num := "?"
-		if pr.Number > 0 {
-			num = fmt.Sprintf("#%d", pr.Number)
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			num,
-			data.AssigneesLabel(pr),
-			data.StatusLabel(pr),
-			data.QueueLabel(pr),
-			data.QueuePositionLabel(pr),
-			data.ETALabel(pr),
-			pr.URL,
-		)
+	plain := ui.IsPlain(out)
+	headers := []string{"PR", "Assignee", "Status", "Queue", "Pos", "ETA", "URL"}
+
+	type cell struct{ raw, rendered string }
+	rows := make([][]cell, 0, len(results)+1)
+
+	headerRow := make([]cell, len(headers))
+	for i, h := range headers {
+		headerRow[i] = cell{raw: h, rendered: ui.Header(plain, h)}
 	}
-	return tw.Flush()
+	rows = append(rows, headerRow)
+
+	for _, r := range results {
+		var raw [7]string
+		if r.Err != nil {
+			raw = [7]string{"?", "-", "error", "-", "-", "-", r.URL}
+		} else {
+			pr := r.PR
+			num := "?"
+			if pr.Number > 0 {
+				num = fmt.Sprintf("#%d", pr.Number)
+			}
+			raw = [7]string{
+				num,
+				data.AssigneesLabel(pr),
+				data.StatusLabel(pr),
+				data.QueueLabel(pr),
+				data.QueuePositionLabel(pr),
+				data.ETALabel(pr),
+				pr.URL,
+			}
+		}
+		row := make([]cell, 7)
+		for i, v := range raw {
+			rendered := v
+			switch i {
+			case 2:
+				rendered = ui.StatusBadge(plain, v)
+			case 6:
+				rendered = ui.Dim(plain, v)
+			}
+			row[i] = cell{raw: v, rendered: rendered}
+		}
+		rows = append(rows, row)
+	}
+
+	widths := make([]int, len(headers))
+	for _, row := range rows {
+		for i, c := range row {
+			if w := lipgloss.Width(c.raw); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+
+	for _, row := range rows {
+		for i, c := range row {
+			if i == len(row)-1 {
+				fmt.Fprint(out, c.rendered)
+				continue
+			}
+			pad := widths[i] - lipgloss.Width(c.raw) + 2
+			if pad < 1 {
+				pad = 1
+			}
+			fmt.Fprint(out, c.rendered, strings.Repeat(" ", pad))
+		}
+		fmt.Fprintln(out)
+	}
+	return nil
 }
 
 type jsonRow struct {

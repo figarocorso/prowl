@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/figarocorso/prowl/internal/config"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -23,43 +24,48 @@ func init() {
 
 func runCheck(cmd *cobra.Command, _ []string) error {
 	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, "🦉 prowl · environment check")
+	plain := ui.IsPlain(out)
+	if plain {
+		fmt.Fprintln(out, "prowl · environment check")
+	} else {
+		fmt.Fprintf(out, "%s %s\n", "🦉", ui.Title(plain, "prowl · environment check"))
+	}
 	fmt.Fprintln(out)
 
 	missing := 0
 	if path, err := exec.LookPath("gh"); err == nil {
-		printOK(out, "gh", path)
+		printOK(out, plain, "gh", path)
 	} else {
-		printMissing(out, "gh", "install GitHub CLI (https://cli.github.com)")
+		printMissing(out, plain, "gh", "install GitHub CLI (https://cli.github.com)")
 		missing++
 	}
 
 	if err := ghAuthStatus(); err == nil {
-		printOK(out, "gh auth", "authenticated")
+		printOK(out, plain, "gh auth", "authenticated")
 	} else {
-		printOptional(out, "gh auth", "run 'gh auth login' (private repos need auth)")
+		printOptional(out, plain, "gh auth", "run 'gh auth login' (private repos need auth)")
 	}
 
 	if path := browserOpener(); path != "" {
-		printOK(out, "browser", path)
+		printOK(out, plain, "browser", path)
 	} else {
-		printOptional(out, "browser", "no 'open'/'xdg-open'; PR links won't auto-open")
+		printOptional(out, plain, "browser", "no 'open'/'xdg-open'; PR links won't auto-open")
 	}
 
 	if path := clipboardTool(); path != "" {
-		printOK(out, "clipboard", path)
+		printOK(out, plain, "clipboard", path)
 	} else {
-		printOptional(out, "clipboard", "no pbcopy/wl-copy/xclip/xsel; copy disabled")
+		printOptional(out, plain, "clipboard", "no pbcopy/wl-copy/xclip/xsel; copy disabled")
 	}
 
 	cfg, err := config.Load(dataDir)
 	if err != nil {
-		printMissing(out, "data dir", err.Error())
+		printMissing(out, plain, "data dir", err.Error())
 		missing++
 	} else if err := checkWritable(cfg.Paths.DataDir); err == nil {
-		printOK(out, "data dir", cfg.Paths.DataDir)
+		printOK(out, plain, "data dir", cfg.Paths.DataDir)
 	} else {
-		printMissing(out, "data dir", err.Error())
+		printMissing(out, plain, "data dir", err.Error())
 		missing++
 	}
 
@@ -67,7 +73,7 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 	if missing > 0 {
 		return fmt.Errorf("%d required dependency/dependencies missing", missing)
 	}
-	fmt.Fprintln(out, "✓ all required dependencies present")
+	fmt.Fprintf(out, "%s all required dependencies present\n", ui.OK(plain))
 	return nil
 }
 
@@ -118,12 +124,24 @@ func checkWritable(dir string) error {
 	return os.Remove(tmp.Name())
 }
 
-func printOK(out interface{ Write([]byte) (int, error) }, name, detail string) {
-	fmt.Fprintf(out, "  [OK]       %-14s %s\n", name, detail)
+func printOK(out interface{ Write([]byte) (int, error) }, plain bool, name, detail string) {
+	if plain {
+		fmt.Fprintf(out, "  [OK]       %-14s %s\n", name, detail)
+		return
+	}
+	fmt.Fprintf(out, "  %s  %-14s %s\n", ui.OK(false), name, ui.Dim(false, detail))
 }
-func printMissing(out interface{ Write([]byte) (int, error) }, name, detail string) {
-	fmt.Fprintf(out, "  [MISSING]  %-14s %s\n", name, detail)
+func printMissing(out interface{ Write([]byte) (int, error) }, plain bool, name, detail string) {
+	if plain {
+		fmt.Fprintf(out, "  [MISSING]  %-14s %s\n", name, detail)
+		return
+	}
+	fmt.Fprintf(out, "  %s  %-14s %s\n", ui.Err(false), name, detail)
 }
-func printOptional(out interface{ Write([]byte) (int, error) }, name, detail string) {
-	fmt.Fprintf(out, "  [OPTIONAL] %-14s %s\n", name, detail)
+func printOptional(out interface{ Write([]byte) (int, error) }, plain bool, name, detail string) {
+	if plain {
+		fmt.Fprintf(out, "  [OPTIONAL] %-14s %s\n", name, detail)
+		return
+	}
+	fmt.Fprintf(out, "  %s  %-14s %s\n", ui.Warn(false), name, ui.Dim(false, detail))
 }

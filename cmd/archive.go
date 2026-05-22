@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/figarocorso/prowl/internal/data"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -38,10 +39,12 @@ func runArchive(cmd *cobra.Command, _ []string) error {
 	}
 	results := client.FetchBatch(context.Background(), urls)
 
+	plainErr := ui.IsPlain(cmd.OutOrStderr())
+	plainOut := ui.IsPlain(cmd.OutOrStdout())
 	var done []string
 	for _, r := range results {
 		if r.Err != nil {
-			fmt.Fprintf(cmd.OutOrStderr(), "⚠ fetch %s: %v\n", r.URL, r.Err)
+			fmt.Fprintf(cmd.OutOrStderr(), "%s fetch %s: %v\n", ui.Warn(plainErr), r.URL, r.Err)
 			continue
 		}
 		if data.IsTerminal(r.PR) {
@@ -49,16 +52,16 @@ func runArchive(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	if len(done) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "✓ nothing to archive")
+		fmt.Fprintf(cmd.OutOrStdout(), "%s nothing to archive\n", ui.OK(plainOut))
 		return nil
 	}
 	moved, err := store.MoveActiveToReviewed(done)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ archived %d PR(s)\n", moved)
+	fmt.Fprintf(cmd.OutOrStdout(), "%s archived %d PR(s)\n", ui.OK(plainOut), moved)
 	for _, u := range done {
-		fmt.Fprintf(cmd.OutOrStdout(), "  → %s\n", u)
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s %s\n", ui.Arrow(plainOut), u)
 	}
 	return nil
 }

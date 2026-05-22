@@ -16,12 +16,48 @@ import (
 )
 
 var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
-	statusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	errStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	okStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-	hintStyle   = lipgloss.NewStyle().Faint(true)
+	headerStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("212"))
+	statusStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	errStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	okStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
+	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	mergedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+	closedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
+	keyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
+	hintStyle    = lipgloss.NewStyle().Faint(true)
+	confirmStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 )
+
+// statusEmojiLabel returns an emoji-prefixed label for a status string,
+// without ANSI escapes so the bubbles table can truncate it correctly.
+func statusEmojiLabel(label string) string {
+	switch label {
+	case "open":
+		return "🟢 open"
+	case "draft":
+		return "📝 draft"
+	case "open/blocked":
+		return "⛔ blocked"
+	case "merged":
+		return "🟣 merged"
+	case "closed":
+		return "🔴 closed"
+	case "unknown":
+		return "❓ unknown"
+	case "error":
+		return "⚠ error"
+	default:
+		return label
+	}
+}
+
+// queueEmojiLabel decorates the queue column with a small visual cue.
+func queueEmojiLabel(label string) string {
+	if label == "-" {
+		return label
+	}
+	return "🚦 " + label
+}
 
 // Model is the Bubble Tea state for prowl's TUI.
 type Model struct {
@@ -80,8 +116,8 @@ func tableColumns() []table.Column {
 	return []table.Column{
 		{Title: "PR", Width: 7},
 		{Title: "Assignee", Width: 18},
-		{Title: "Status", Width: 14},
-		{Title: "Queue", Width: 24},
+		{Title: "Status", Width: 16},
+		{Title: "Queue", Width: 28},
 		{Title: "Pos", Width: 4},
 		{Title: "ETA", Width: 6},
 		{Title: "URL", Width: 50},
@@ -221,12 +257,20 @@ func (m *Model) View() string {
 	switch {
 	case m.confirmArchive:
 		prompt := fmt.Sprintf("\n📦 Archive %d closed/merged PR(s)? [y/N]", len(m.pendingArchive))
-		b.WriteString(headerStyle.Render(prompt))
+		b.WriteString(confirmStyle.Render(prompt))
 	case m.confirmDelete:
 		prompt := fmt.Sprintf("\n🗑  Delete %s? [y/N]", m.pendingDelete)
-		b.WriteString(headerStyle.Render(prompt))
+		b.WriteString(confirmStyle.Render(prompt))
 	default:
-		b.WriteString(hintStyle.Render("\n↑↓ nav · ⏎ open · c copy · d delete · r refresh · q quit"))
+		hints := []string{
+			keyStyle.Render("↑↓") + hintStyle.Render(" nav"),
+			keyStyle.Render("⏎") + hintStyle.Render(" open"),
+			keyStyle.Render("c") + hintStyle.Render(" copy"),
+			keyStyle.Render("d") + hintStyle.Render(" delete"),
+			keyStyle.Render("r") + hintStyle.Render(" refresh"),
+			keyStyle.Render("q") + hintStyle.Render(" quit"),
+		}
+		b.WriteString("\n" + strings.Join(hints, hintStyle.Render(" · ")))
 	}
 	return b.String()
 }
@@ -256,7 +300,7 @@ func rowsToTableRows(results []data.Result) []table.Row {
 	out := make([]table.Row, 0, len(results))
 	for _, r := range results {
 		if r.Err != nil {
-			out = append(out, table.Row{"?", "-", "error", "-", "-", "-", r.URL})
+			out = append(out, table.Row{"?", "-", statusEmojiLabel("error"), "-", "-", "-", r.URL})
 			continue
 		}
 		pr := r.PR
@@ -267,8 +311,8 @@ func rowsToTableRows(results []data.Result) []table.Row {
 		out = append(out, table.Row{
 			num,
 			data.AssigneesLabel(pr),
-			data.StatusLabel(pr),
-			data.QueueLabel(pr),
+			statusEmojiLabel(data.StatusLabel(pr)),
+			queueEmojiLabel(data.QueueLabel(pr)),
 			data.QueuePositionLabel(pr),
 			data.ETALabel(pr),
 			pr.URL,
@@ -293,9 +337,17 @@ func summary(results []data.Result) string {
 			closed++
 		}
 	}
-	s := fmt.Sprintf("📊 %d open · %d merged · %d closed", open, merged, closed)
+	parts := []string{
+		"📊",
+		okStyle.Render(fmt.Sprintf("🟢 %d open", open)),
+		statusStyle.Render("·"),
+		mergedStyle.Render(fmt.Sprintf("🟣 %d merged", merged)),
+		statusStyle.Render("·"),
+		closedStyle.Render(fmt.Sprintf("🔴 %d closed", closed)),
+	}
+	s := strings.Join(parts, " ")
 	if errs > 0 {
-		s += fmt.Sprintf(" · %d errors", errs)
+		s += " " + statusStyle.Render("·") + " " + errStyle.Render(fmt.Sprintf("⚠ %d errors", errs))
 	}
 	return s
 }
