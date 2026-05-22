@@ -15,8 +15,15 @@
 # @raycast.description Launch prowl interactive TUI in iTerm
 # @raycast.author figarocorso
 
-# Override with: export PROWL_BIN=/path/to/prowl.sh
-PROWL_CMD="${PROWL_BIN:-prowl.sh}"
+# Resolve which prowl to launch. Override with PROWL_BIN=/abs/path.
+# Default: prefer the Go binary `prowl`; fall back to the legacy `prowl.sh`.
+if [[ -n "${PROWL_BIN:-}" ]]; then
+  PROWL_CMD="$PROWL_BIN"
+elif command -v prowl >/dev/null 2>&1; then
+  PROWL_CMD="prowl"
+else
+  PROWL_CMD="prowl.sh"
+fi
 
 osascript <<EOF
 tell application "iTerm"
