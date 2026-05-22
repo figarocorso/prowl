@@ -8,10 +8,10 @@
 > **Keep watch over your pull requests.**
 
 A single-binary CLI + TUI for keeping tabs on the GitHub Pull Requests you care
-about. Track a list of PR URLs, then run a single command to see their current
-state (open / draft / merged / blocked), assignees, and GitHub merge-queue
-position — all in a Bubble Tea interactive table, with `Enter` to open the PR
-in your browser.
+about. Track a list of GitHub PR URLs, then run a single command to see their
+current state (open / draft / merged / blocked), assignees, and GitHub
+merge-queue position — all in a Bubble Tea interactive table, with `Enter` to
+open the PR in your browser.
 
 ```
 🦉 prowl  📊 2 open · 1 merged · 0 closed
