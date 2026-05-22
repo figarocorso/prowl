@@ -1,5 +1,10 @@
 # 🦉 prowl
 
+[![CI](https://github.com/figarocorso/prowl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/figarocorso/prowl/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/figarocorso/prowl?sort=semver)](https://github.com/figarocorso/prowl/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/figarocorso/prowl)](./go.mod)
+[![License](https://img.shields.io/github/license/figarocorso/prowl)](./LICENSE)
+
 > **Keep watch over your pull requests.**
 
 A single-binary CLI + TUI for keeping tabs on the GitHub Pull Requests you care
@@ -228,34 +233,5 @@ Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
 ## Contributing
 
-Issues and pull requests welcome. Keep changes focused, small, and
-self-contained.
-
-### Development
-
-Common workflows via [Task](https://taskfile.dev):
-
-```sh
-task test            # go test ./...
-task coverage        # write coverage.out + print total
-task coverage-html   # render coverage.html
-task coverage-check  # fail if total < threshold (default 55%)
-task lint            # golangci-lint
-task ci              # tidy + lint + test + coverage-check
-```
-
-Override the threshold with `COVERAGE_THRESHOLD=70 task coverage-check`.
-
-### Git hooks
-
-This repo uses [Lefthook](https://lefthook.dev) (`lefthook.yml`):
-
-- **pre-commit** — `gofmt`, `go vet`, `golangci-lint`
-- **pre-push** — `go test -race` + coverage threshold check
-
-Install once:
-
-```sh
-brew install lefthook   # or: go install github.com/evilmartians/lefthook@latest
-task install-hooks      # runs `lefthook install`
-```
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for development setup,
+coverage policy, git hooks, and the release process.
