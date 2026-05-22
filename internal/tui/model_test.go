@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +16,21 @@ import (
 	"github.com/figarocorso/prowl/internal/store"
 	"github.com/stretchr/testify/require"
 )
+
+// countingClient wraps a PRClient and counts FetchBatch invocations.
+type countingClient struct {
+	inner data.PRClient
+	calls atomic.Int32
+}
+
+func (c *countingClient) Fetch(ctx context.Context, url string) (data.PR, error) {
+	return c.inner.Fetch(ctx, url)
+}
+
+func (c *countingClient) FetchBatch(ctx context.Context, urls []string) []data.Result {
+	c.calls.Add(1)
+	return c.inner.FetchBatch(ctx, urls)
+}
 
 var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]`)
 
@@ -236,6 +252,52 @@ func TestDeletePromptCancelKeepsRow(t *testing.T) {
 	active, err := m.store.Active()
 	require.NoError(t, err)
 	require.Equal(t, []string{url}, active)
+}
+
+func TestAutoRefreshTickRefetches(t *testing.T) {
+	url := "https://github.com/acme/api/pull/1234"
+
+	dir := t.TempDir()
+	s, err := store.New(filepath.Join(dir, "a.txt"), filepath.Join(dir, "r.txt"))
+	require.NoError(t, err)
+	_, err = s.Add(url)
+	require.NoError(t, err)
+
+	mock := data.NewMockClient()
+	require.NoError(t, mock.LoadFixtures(filepath.Join("..", "..", "internal", "data", "testdata", "fixtures.json")))
+	counter := &countingClient{inner: mock}
+
+	cfg := &config.Config{Paths: config.Paths{DataDir: dir}}
+	m := New(cfg, s, counter)
+	m.SetRefreshInterval(50 * time.Millisecond)
+
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	// Wait for the initial fetch to render.
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "#1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+	require.GreaterOrEqual(t, counter.calls.Load(), int32(1))
+
+	// Wait for at least one auto-refresh tick to drive a second FetchBatch.
+	require.Eventually(t, func() bool {
+		return counter.calls.Load() >= 2
+	}, 2*time.Second, 20*time.Millisecond)
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
+
+func TestAutoRefreshDisabledWhenIntervalZero(t *testing.T) {
+	m := newTestModel(t, nil)
+	// No SetRefreshInterval call — default zero means disabled.
+	require.Nil(t, m.autoRefreshCmd(), "auto refresh cmd should be nil when interval is 0")
+
+	m.SetRefreshInterval(-1)
+	require.Nil(t, m.autoRefreshCmd(), "auto refresh cmd should be nil for non-positive interval")
+
+	m.SetRefreshInterval(10 * time.Second)
+	require.NotNil(t, m.autoRefreshCmd(), "auto refresh cmd should be set when interval is positive")
 }
 
 func TestModelSummary(t *testing.T) {
