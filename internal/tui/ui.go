@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/figarocorso/prowl/internal/config"
@@ -13,6 +14,16 @@ import (
 
 // Run boots the TUI against the real config + store + GitHub client.
 func Run(dataDir string) error {
+	return run(dataDir, 0)
+}
+
+// RunWatch behaves like Run but auto-refreshes the PR list every interval.
+// A non-positive interval disables auto-refresh (same as Run).
+func RunWatch(dataDir string, interval time.Duration) error {
+	return run(dataDir, interval)
+}
+
+func run(dataDir string, interval time.Duration) error {
 	cfg, err := config.Load(dataDir)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -26,6 +37,7 @@ func Run(dataDir string) error {
 		return fmt.Errorf("github client: %w", err)
 	}
 	m := New(cfg, s, client)
+	m.SetRefreshInterval(interval)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	_, err = p.Run()
 	return err
