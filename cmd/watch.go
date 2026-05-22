@@ -35,5 +35,5 @@ func runWatch(_ *cobra.Command, _ []string) error {
 	if watchInterval < watchMinInterval {
 		return fmt.Errorf("--interval must be at least %s (got %s)", watchMinInterval, watchInterval)
 	}
-	return tui.RunWatch(dataDir, watchInterval)
+	return tui.RunWatch(dataDir, profile, watchInterval)
 }

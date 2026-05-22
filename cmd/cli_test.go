@@ -18,6 +18,7 @@ func setupCLI(t *testing.T) (*data.MockClient, string) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("PROWL_DATA_DIR", dir)
+	t.Setenv("PROWL_PROFILE", "")
 	t.Setenv("PROWL_ACTIVE", "")
 	t.Setenv("PROWL_REVIEWED", "")
 	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
@@ -29,10 +30,13 @@ func setupCLI(t *testing.T) (*data.MockClient, string) {
 	clientFactory = func() (data.PRClient, error) { return mock, nil }
 	origDataDir := dataDir
 	dataDir = ""
+	origProfile := profile
+	profile = ""
 	origJSON := jsonOut
 	t.Cleanup(func() {
 		clientFactory = origFactory
 		dataDir = origDataDir
+		profile = origProfile
 		jsonOut = origJSON
 	})
 	return mock, dir

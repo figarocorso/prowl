@@ -13,18 +13,18 @@ import (
 )
 
 // Run boots the TUI against the real config + store + GitHub client.
-func Run(dataDir string) error {
-	return run(dataDir, 0)
+func Run(dataDir, profile string) error {
+	return run(dataDir, profile, 0)
 }
 
 // RunWatch behaves like Run but auto-refreshes the PR list every interval.
 // A non-positive interval disables auto-refresh (same as Run).
-func RunWatch(dataDir string, interval time.Duration) error {
-	return run(dataDir, interval)
+func RunWatch(dataDir, profile string, interval time.Duration) error {
+	return run(dataDir, profile, interval)
 }
 
-func run(dataDir string, interval time.Duration) error {
-	cfg, err := config.Load(dataDir)
+func run(dataDir, profile string, interval time.Duration) error {
+	cfg, err := config.Load(dataDir, profile)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}

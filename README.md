@@ -165,6 +165,18 @@ Priority (highest to lowest):
 Individual file paths can also be overridden via `PROWL_ACTIVE` and
 `PROWL_REVIEWED`.
 
+### Profiles
+
+Use `--profile <name>` (or `PROWL_PROFILE=<name>`) to keep PRs from different
+contexts in separate subdirectories of the data dir (e.g. `work` vs
+`personal`). When unset, prowl uses the base data dir unchanged so existing
+setups keep working.
+
+```sh
+prowl --profile work add https://github.com/acme/api/pull/1234
+PROWL_PROFILE=personal prowl list
+```
+
 ### Optional config file
 
 prowl looks for an optional YAML config at

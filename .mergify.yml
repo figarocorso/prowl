@@ -1,0 +1,9 @@
+pull_request_rules:
+  - name: Auto-squash-merge Dependabot PRs once CI is green
+    conditions:
+      - author=dependabot[bot]
+      - base=main
+      - check-success=test + lint + coverage
+    actions:
+      merge:
+        method: squash
