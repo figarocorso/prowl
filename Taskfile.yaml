@@ -16,6 +16,25 @@ tasks:
     cmds:
       - go test -race ./...
 
+  coverage:
+    desc: Run tests and write coverage.out
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out | tail -1
+
+  coverage-html:
+    desc: Render coverage.out as HTML
+    deps: [coverage]
+    cmds:
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "open coverage.html"
+
+  coverage-check:
+    desc: Fail if total coverage below threshold (default 55%, override via COVERAGE_THRESHOLD)
+    deps: [coverage]
+    cmds:
+      - ./scripts/coverage-check.sh
+
   lint:
     desc: Run golangci-lint
     cmds:
@@ -26,9 +45,14 @@ tasks:
     cmds:
       - go mod tidy
 
+  install-hooks:
+    desc: Install lefthook git hooks
+    cmds:
+      - lefthook install
+
   ci:
     desc: Run the full CI suite locally
-    deps: [tidy, lint, test]
+    deps: [tidy, lint, test, coverage-check]
 
   release-snapshot:
     desc: Build a local snapshot release via GoReleaser

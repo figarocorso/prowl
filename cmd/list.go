@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/figarocorso/prowl/internal/data"
 	"github.com/figarocorso/prowl/internal/store"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -41,7 +42,12 @@ func runList(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	if len(urls) == 0 {
-		fmt.Fprintln(cmd.OutOrStderr(), "📭 no PRs to list")
+		plain := ui.IsPlain(cmd.OutOrStderr())
+		if plain {
+			fmt.Fprintln(cmd.OutOrStderr(), "no PRs to list")
+		} else {
+			fmt.Fprintln(cmd.OutOrStderr(), "📭 no PRs to list")
+		}
 		return nil
 	}
 	client, err := clientFactory()
@@ -93,30 +99,97 @@ func filterOpen(in []data.Result) []data.Result {
 	return out
 }
 
+type tableCell struct{ raw, rendered string }
+
 func renderTable(out io.Writer, results []data.Result) error {
-	tw := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PR\tAssignee\tStatus\tQueue\tPos\tETA\tURL")
+	plain := ui.IsPlain(out)
+	headers := []string{"PR", "Assignee", "Status", "Queue", "Pos", "ETA", "URL"}
+	rows := buildTableRows(plain, headers, results)
+	widths := columnWidths(rows)
+	for _, row := range rows {
+		printTableRow(out, row, widths)
+	}
+	return nil
+}
+
+func buildTableRows(plain bool, headers []string, results []data.Result) [][]tableCell {
+	rows := make([][]tableCell, 0, len(results)+1)
+	header := make([]tableCell, len(headers))
+	for i, h := range headers {
+		header[i] = tableCell{raw: h, rendered: ui.Header(plain, h)}
+	}
+	rows = append(rows, header)
 	for _, r := range results {
-		if r.Err != nil {
-			fmt.Fprintf(tw, "?\t-\terror\t-\t-\t-\t%s\n", r.URL)
+		rows = append(rows, resultToRow(plain, r))
+	}
+	return rows
+}
+
+func resultToRow(plain bool, r data.Result) []tableCell {
+	raw := rawRowValues(r)
+	row := make([]tableCell, len(raw))
+	for i, v := range raw {
+		row[i] = tableCell{raw: v, rendered: renderCellValue(plain, i, v)}
+	}
+	return row
+}
+
+func rawRowValues(r data.Result) [7]string {
+	if r.Err != nil {
+		return [7]string{"?", "-", "error", "-", "-", "-", r.URL}
+	}
+	pr := r.PR
+	num := "?"
+	if pr.Number > 0 {
+		num = fmt.Sprintf("#%d", pr.Number)
+	}
+	return [7]string{
+		num,
+		data.AssigneesLabel(pr),
+		data.StatusLabel(pr),
+		data.QueueLabel(pr),
+		data.QueuePositionLabel(pr),
+		data.ETALabel(pr),
+		pr.URL,
+	}
+}
+
+func renderCellValue(plain bool, col int, v string) string {
+	switch col {
+	case 2:
+		return ui.StatusBadge(plain, v)
+	case 6:
+		return ui.Dim(plain, v)
+	default:
+		return v
+	}
+}
+
+func columnWidths(rows [][]tableCell) []int {
+	if len(rows) == 0 {
+		return nil
+	}
+	widths := make([]int, len(rows[0]))
+	for _, row := range rows {
+		for i, c := range row {
+			if w := lipgloss.Width(c.raw); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	return widths
+}
+
+func printTableRow(out io.Writer, row []tableCell, widths []int) {
+	for i, c := range row {
+		if i == len(row)-1 {
+			fmt.Fprint(out, c.rendered)
 			continue
 		}
-		pr := r.PR
-		num := "?"
-		if pr.Number > 0 {
-			num = fmt.Sprintf("#%d", pr.Number)
-		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			num,
-			data.AssigneesLabel(pr),
-			data.StatusLabel(pr),
-			data.QueueLabel(pr),
-			data.QueuePositionLabel(pr),
-			data.ETALabel(pr),
-			pr.URL,
-		)
+		pad := max(widths[i]-lipgloss.Width(c.raw)+2, 1)
+		fmt.Fprint(out, c.rendered, strings.Repeat(" ", pad))
 	}
-	return tw.Flush()
+	fmt.Fprintln(out)
 }
 
 type jsonRow struct {

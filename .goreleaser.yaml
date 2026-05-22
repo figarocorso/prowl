@@ -41,6 +41,17 @@ checksum:
   name_template: "checksums.txt"
   algorithm: sha256
 
+# Ship a Software Bill of Materials per release. Uses syft (must be available
+# on the release runner — the official goreleaser GitHub Action image bundles
+# it). SPDX JSON is the most widely supported consumer format.
+sboms:
+  - id: spdx
+    artifacts: archive
+    documents:
+      - "{{ .ArtifactName }}.spdx.json"
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document"]
+
 snapshot:
   version_template: "{{ incpatch .Version }}-dev"
 
@@ -55,26 +66,24 @@ changelog:
       - Merge pull request
       - Merge branch
 
-# Homebrew tap publishing — enable once homebrew-tap repo + HOMEBREW_TAP_GITHUB_TOKEN
-# secret are in place. Until then GoReleaser would fail templating the token.
-# brews:
-#   - name: prowl
-#     repository:
-#       owner: figarocorso
-#       name: homebrew-tap
-#       branch: main
-#       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-#     homepage: "https://github.com/figarocorso/prowl"
-#     description: "🦉 Keep watch over your GitHub Pull Requests from the terminal."
-#     license: "Apache-2.0"
-#     commit_author:
-#       name: figarocorso
-#       email: figarocorso@users.noreply.github.com
-#     directory: Formula
-#     install: |
-#       bin.install "prowl"
-#     test: |
-#       system "#{bin}/prowl", "--help"
+brews:
+  - name: prowl
+    repository:
+      owner: figarocorso
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/figarocorso/prowl"
+    description: "🦉 Keep watch over your GitHub Pull Requests from the terminal."
+    license: "Apache-2.0"
+    commit_author:
+      name: figarocorso
+      email: figarocorso@users.noreply.github.com
+    directory: Formula
+    install: |
+      bin.install "prowl"
+    test: |
+      system "#{bin}/prowl", "--help"
 
 release:
   draft: false

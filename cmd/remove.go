@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/figarocorso/prowl/internal/data"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -24,11 +25,13 @@ func runRemove(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	plainErr := ui.IsPlain(cmd.OutOrStderr())
+	plainOut := ui.IsPlain(cmd.OutOrStdout())
 	totalRemoved := 0
 	for _, raw := range args {
 		url, err := data.CanonicalURL(raw)
 		if err != nil {
-			fmt.Fprintf(cmd.OutOrStderr(), "✗ %s\n", err)
+			fmt.Fprintf(cmd.OutOrStderr(), "%s %s\n", ui.Err(plainErr), err)
 			continue
 		}
 		n, err := store.Remove(url)
@@ -36,10 +39,10 @@ func runRemove(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if n == 0 {
-			fmt.Fprintf(cmd.OutOrStderr(), "⚠ not tracked: %s\n", url)
+			fmt.Fprintf(cmd.OutOrStderr(), "%s not tracked: %s\n", ui.Warn(plainErr), url)
 			continue
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ removed: %s (%d row(s))\n", url, n)
+		fmt.Fprintf(cmd.OutOrStdout(), "%s removed: %s (%d row(s))\n", ui.OK(plainOut), url, n)
 		totalRemoved += n
 	}
 	if totalRemoved == 0 {

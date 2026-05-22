@@ -7,10 +7,20 @@ on:
 
 permissions:
   contents: read
+  # needed by fgrosse/go-coverage-report to post PR comment
+  pull-requests: write
+  # needed to read the baseline coverage artifact from main
+  actions: read
+
+env:
+  # Bumped from 55 -> 60 (current total is ~60.7%). The TODO target is 70,
+  # but raising the gate that high would require a substantial test push
+  # across cmd/* and internal/data first. Tracked in TODO.md.
+  COVERAGE_THRESHOLD: "60"
 
 jobs:
   test:
-    name: test + lint
+    name: test + lint + coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +33,130 @@ jobs:
       - name: go mod download
         run: go mod download
 
-      - name: go test
+      - name: go test (with coverage)
         run: go test -race -coverprofile=coverage.out ./...
+
+      - name: coverage summary
+        run: |
+          go tool cover -func=coverage.out | tee coverage.txt
+          total=$(awk '/^total:/ {gsub("%","",$3); print $3}' coverage.txt)
+          {
+            echo "### Coverage"
+            echo ""
+            echo "**Total: ${total}%** (threshold: ${COVERAGE_THRESHOLD}%)"
+            echo ""
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: enforce coverage threshold
+        run: ./scripts/coverage-check.sh
+
+      - name: upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: coverage.out
+          if-no-files-found: error
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go-version: [stable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: go build
+        run: go build ./...
+
+  complexity:
+    name: complexity gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      # Tightened from >30 / >50 to >15 / >20 after decomposing the previous
+      # hotspots (mcp.toolListPRs, cmd.renderTable, tui.Update). Current worst:
+      #   gocyclo:  tui.handleNormalKey = 12
+      #   gocognit: tui.handleNormalKey = 15
+      - name: install gocyclo / gocognit
+        run: |
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          go install github.com/uudashr/gocognit/cmd/gocognit@latest
+
+      - name: gocyclo (fail >15)
+        run: $(go env GOPATH)/bin/gocyclo -over 15 .
+
+      - name: gocognit (fail >20)
+        run: $(go env GOPATH)/bin/gocognit -over 20 .
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: govulncheck ./...
+        run: $(go env GOPATH)/bin/govulncheck ./...
+
+  dependency-review:
+    name: dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+
+  osv-scanner:
+    name: osv-scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            ./
+
+  coverage-report:
+    name: coverage delta comment
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: fgrosse/go-coverage-report@v1.2.0
+        with:
+          coverage-artifact-name: code-coverage
+          coverage-file-name: coverage.out

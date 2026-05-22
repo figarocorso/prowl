@@ -30,10 +30,10 @@ func New(active, reviewed string) (*Store, error) {
 }
 
 func (s *Store) ensure() error {
-	if err := os.MkdirAll(filepath.Dir(s.ActivePath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.ActivePath), 0o700); err != nil {
 		return fmt.Errorf("mkdir active: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(s.ReviewedPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(s.ReviewedPath), 0o700); err != nil {
 		return fmt.Errorf("mkdir reviewed: %w", err)
 	}
 	if err := s.migrate(); err != nil {
@@ -77,7 +77,7 @@ func appendFile(dst, src string) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", src, err)
 	}
-	f, err := os.OpenFile(dst, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(dst, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open %s: %w", dst, err)
 	}
@@ -92,7 +92,7 @@ func touch(path string) error {
 	if _, err := os.Stat(path); err == nil {
 		return nil
 	}
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
@@ -160,7 +160,7 @@ func (s *Store) Add(url string) (bool, error) {
 			}
 		}
 	}
-	f, err := os.OpenFile(s.ActivePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(s.ActivePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return false, fmt.Errorf("open active: %w", err)
 	}
@@ -208,7 +208,7 @@ func moveBetweenFiles(src, dst string, target map[string]struct{}) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	dstFile, err := os.OpenFile(dst, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	dstFile, err := os.OpenFile(dst, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", dst, err)
 	}

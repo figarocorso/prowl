@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/figarocorso/prowl/internal/data"
 	"github.com/stretchr/testify/assert"
@@ -17,6 +18,7 @@ func setupCLI(t *testing.T) (*data.MockClient, string) {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("PROWL_DATA_DIR", dir)
+	t.Setenv("PROWL_PROFILE", "")
 	t.Setenv("PROWL_ACTIVE", "")
 	t.Setenv("PROWL_REVIEWED", "")
 	t.Setenv("PROWL_CONFIG", filepath.Join(dir, "nope.yml"))
@@ -28,10 +30,13 @@ func setupCLI(t *testing.T) (*data.MockClient, string) {
 	clientFactory = func() (data.PRClient, error) { return mock, nil }
 	origDataDir := dataDir
 	dataDir = ""
+	origProfile := profile
+	profile = ""
 	origJSON := jsonOut
 	t.Cleanup(func() {
 		clientFactory = origFactory
 		dataDir = origDataDir
+		profile = origProfile
 		jsonOut = origJSON
 	})
 	return mock, dir
@@ -130,6 +135,34 @@ func TestGetJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stdout), &pr))
 	assert.Equal(t, 1234, pr.Number)
 	assert.Equal(t, "OPEN", pr.State)
+}
+
+func TestWatchFlagParsesInterval(t *testing.T) {
+	origInterval := watchInterval
+	t.Cleanup(func() { watchInterval = origInterval })
+
+	require.NoError(t, watchCmd.ParseFlags([]string{"--interval", "45s"}))
+	assert.Equal(t, 45*time.Second, watchInterval)
+}
+
+func TestWatchFlagDefaultIs30s(t *testing.T) {
+	// Cobra evaluates defaults when the flag isn't provided; mimic that by
+	// re-parsing with no args.
+	origInterval := watchInterval
+	t.Cleanup(func() { watchInterval = origInterval })
+
+	require.NoError(t, watchCmd.ParseFlags(nil))
+	assert.Equal(t, 30*time.Second, watchInterval)
+}
+
+func TestWatchRejectsTooLowInterval(t *testing.T) {
+	origInterval := watchInterval
+	t.Cleanup(func() { watchInterval = origInterval })
+
+	watchInterval = 2 * time.Second
+	err := runWatch(watchCmd, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least 5s")
 }
 
 func TestListOpenFilter(t *testing.T) {

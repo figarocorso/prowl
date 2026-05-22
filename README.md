@@ -1,5 +1,10 @@
 # 🦉 prowl
 
+[![CI](https://github.com/figarocorso/prowl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/figarocorso/prowl/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/figarocorso/prowl?sort=semver)](https://github.com/figarocorso/prowl/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/figarocorso/prowl)](./go.mod)
+[![License](https://img.shields.io/github/license/figarocorso/prowl)](./LICENSE)
+
 > **Keep watch over your pull requests.**
 
 A single-binary CLI + TUI for keeping tabs on the GitHub Pull Requests you care
@@ -31,11 +36,24 @@ in your browser.
 
 ## Install
 
+All install paths leave you with a `prowl` binary that must live on your
+`PATH`. Verify with:
+
+```sh
+prowl check
+```
+
+If the command is not found after installing, the directory holding the
+binary is not on your shell `PATH` — see the notes under each method.
+
 ### Homebrew (macOS / Linux)
 
 ```sh
 brew install figarocorso/tap/prowl
 ```
+
+The tap lives at [`figarocorso/homebrew-tap`](https://github.com/figarocorso/homebrew-tap)
+and is updated automatically on every release.
 
 ### `go install`
 
@@ -43,11 +61,27 @@ brew install figarocorso/tap/prowl
 go install github.com/figarocorso/prowl@latest
 ```
 
+This drops the binary in `$(go env GOBIN)` (if set) or `$(go env GOPATH)/bin`
+(typically `~/go/bin`). Add it to your shell `PATH` once:
+
+```sh
+# zsh
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# bash
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
 ### Pre-built binaries
 
 Grab the archive for your platform from
-[the releases page](https://github.com/figarocorso/prowl/releases) and drop the
-extracted `prowl` binary anywhere on your `PATH`.
+[the releases page](https://github.com/figarocorso/prowl/releases), extract
+it, and move the `prowl` binary somewhere already on your `PATH`:
+
+```sh
+tar -xzf prowl_<version>_<os>_<arch>.tar.gz
+sudo mv prowl /usr/local/bin/prowl
+```
 
 ### From source
 
@@ -55,13 +89,9 @@ extracted `prowl` binary anywhere on your `PATH`.
 git clone https://github.com/figarocorso/prowl.git
 cd prowl
 go build -o prowl .
+sudo mv prowl /usr/local/bin/prowl     # or copy under any $PATH dir you own
 ```
 
-Then verify:
-
-```sh
-prowl check
-```
 
 ## Requirements
 
@@ -80,6 +110,7 @@ Optional:
 
 ```sh
 prowl                                       # interactive TUI
+prowl watch [--interval 30s]                # TUI + periodic auto-refresh
 prowl list                                  # plain table on stdout
 prowl list --json                           # JSON array (agent-friendly)
 prowl list --open                           # only currently-open PRs
@@ -91,6 +122,23 @@ prowl get <url> [--json]                    # single-PR detail
 prowl check                                 # environment / auth / data dir
 prowl version
 ```
+
+### Watch mode
+
+`prowl watch` opens the same TUI as `prowl` but re-fetches the active PR list
+on a timer, so a long-running window stays current without you pressing `r`.
+
+```sh
+prowl watch                 # default: refresh every 30s
+prowl watch --interval 1m   # custom cadence (minimum 5s to spare GitHub)
+```
+
+Press `q` or `Ctrl-C` to exit. The default 30s balances staying fresh against
+the GitHub API rate limit; intervals below 5s are rejected.
+
+Output styling: human terminals get colored, emoji-prefixed output. Pipes,
+`NO_COLOR=1`, and `--plain` (alias `--no-color`) force ASCII-only output that
+is safe for AI agents, scripts, and CI logs. `--json` is unaffected.
 
 ### Data files
 
@@ -116,6 +164,18 @@ Priority (highest to lowest):
 
 Individual file paths can also be overridden via `PROWL_ACTIVE` and
 `PROWL_REVIEWED`.
+
+### Profiles
+
+Use `--profile <name>` (or `PROWL_PROFILE=<name>`) to keep PRs from different
+contexts in separate subdirectories of the data dir (e.g. `work` vs
+`personal`). When unset, prowl uses the base data dir unchanged so existing
+setups keep working.
+
+```sh
+prowl --profile work add https://github.com/acme/api/pull/1234
+PROWL_PROFILE=personal prowl list
+```
 
 ### Optional config file
 
@@ -199,5 +259,5 @@ Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
 ## Contributing
 
-Issues and pull requests welcome. Keep changes focused, small, and
-self-contained.
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for development setup,
+coverage policy, git hooks, and the release process.
