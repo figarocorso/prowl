@@ -117,6 +117,10 @@ prowl check                                 # environment / auth / data dir
 prowl version
 ```
 
+Output styling: human terminals get colored, emoji-prefixed output. Pipes,
+`NO_COLOR=1`, and `--plain` (alias `--no-color`) force ASCII-only output that
+is safe for AI agents, scripts, and CI logs. `--json` is unaffected.
+
 ### Data files
 
 `prowl` tracks two plain-text files, one URL per line:

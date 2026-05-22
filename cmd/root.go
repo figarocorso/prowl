@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -34,4 +35,6 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "directory holding list files (default: $XDG_DATA_HOME/prowl)")
+	rootCmd.PersistentFlags().BoolVar(&ui.Plain, "plain", false, "disable colors/emoji; emit ASCII-only output (also honors NO_COLOR)")
+	rootCmd.PersistentFlags().BoolVar(&ui.Plain, "no-color", false, "alias for --plain")
 }

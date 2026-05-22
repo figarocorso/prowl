@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/figarocorso/prowl/internal/data"
+	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -40,11 +41,17 @@ func runGet(cmd *cobra.Command, args []string) error {
 		return enc.Encode(pr)
 	}
 	out := cmd.OutOrStdout()
-	fmt.Fprintf(out, "PR #%d — %s\n", pr.Number, pr.Title)
-	fmt.Fprintf(out, "  URL:       %s\n", pr.URL)
-	fmt.Fprintf(out, "  State:     %s\n", data.StatusLabel(pr))
-	fmt.Fprintf(out, "  Assignees: %s\n", data.AssigneesLabel(pr))
-	fmt.Fprintf(out, "  Queue:     %s (pos %s, ETA %s)\n",
+	plain := ui.IsPlain(out)
+	fmt.Fprintf(out, "%s %s\n",
+		ui.Title(plain, fmt.Sprintf("PR #%d", pr.Number)),
+		pr.Title,
+	)
+	label := func(s string) string { return ui.Dim(plain, s) }
+	fmt.Fprintf(out, "  %s %s\n", label("URL:      "), ui.Dim(plain, pr.URL))
+	fmt.Fprintf(out, "  %s %s\n", label("State:    "), ui.StatusBadge(plain, data.StatusLabel(pr)))
+	fmt.Fprintf(out, "  %s %s\n", label("Assignees:"), data.AssigneesLabel(pr))
+	fmt.Fprintf(out, "  %s %s (pos %s, ETA %s)\n",
+		label("Queue:    "),
 		data.QueueLabel(pr), data.QueuePositionLabel(pr), data.ETALabel(pr))
 	return nil
 }
