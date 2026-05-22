@@ -7,10 +7,17 @@ on:
 
 permissions:
   contents: read
+  # needed by fgrosse/go-coverage-report to post PR comment
+  pull-requests: write
+  # needed to read the baseline coverage artifact from main
+  actions: read
+
+env:
+  COVERAGE_THRESHOLD: "55"
 
 jobs:
   test:
-    name: test + lint
+    name: test + lint + coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,10 +30,51 @@ jobs:
       - name: go mod download
         run: go mod download
 
-      - name: go test
+      - name: go test (with coverage)
         run: go test -race -coverprofile=coverage.out ./...
+
+      - name: coverage summary
+        run: |
+          go tool cover -func=coverage.out | tee coverage.txt
+          total=$(awk '/^total:/ {gsub("%","",$3); print $3}' coverage.txt)
+          {
+            echo "### Coverage"
+            echo ""
+            echo "**Total: ${total}%** (threshold: ${COVERAGE_THRESHOLD}%)"
+            echo ""
+            echo '```'
+            cat coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: enforce coverage threshold
+        run: ./scripts/coverage-check.sh
+
+      - name: upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-coverage
+          path: coverage.out
+          if-no-files-found: error
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+
+  coverage-report:
+    name: coverage delta comment
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    # informational only — first run on main lacks baseline artifact
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: fgrosse/go-coverage-report@v1.2.0
+        with:
+          coverage-artifact-name: code-coverage
+          coverage-file-name: coverage.out
