@@ -164,111 +164,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.table.SetHeight(maxInt(msg.Height-6, 5))
 	case tea.KeyMsg:
-		if m.confirmArchive {
-			switch msg.String() {
-			case "y", "Y":
-				if _, err := m.store.MoveActiveToReviewed(m.pendingArchive); err != nil {
-					m.err = err.Error()
-					m.confirmArchive = false
-					m.pendingArchive = nil
-					return m, nil
-				}
-				return m, tea.Quit
-			case "n", "N", "q", "ctrl+c", "esc", "enter":
-				return m, tea.Quit
-			}
-			return m, nil
-		}
-		if m.confirmDelete {
-			switch msg.String() {
-			case "y", "Y":
-				url := m.pendingDelete
-				m.confirmDelete = false
-				m.pendingDelete = ""
-				if _, err := m.store.Remove(url); err != nil {
-					m.err = err.Error()
-					return m, nil
-				}
-				m.status = "Removed " + url
-				kept := m.rows[:0:0]
-				for _, r := range m.rows {
-					if r.URL != url {
-						kept = append(kept, r)
-					}
-				}
-				m.rows = kept
-				m.table.SetRows(rowsToTableRows(m.rows))
-				m.loading = true
-				return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
-			case "n", "N", "esc":
-				m.confirmDelete = false
-				m.pendingDelete = ""
-				m.status = "Delete cancelled"
-				return m, nil
-			}
-			return m, nil
-		}
-		switch msg.String() {
-		case "q", "ctrl+c", "esc":
-			terminal := m.terminalURLs()
-			if len(terminal) == 0 {
-				return m, tea.Quit
-			}
-			m.confirmArchive = true
-			m.pendingArchive = terminal
-			return m, nil
-		case "r", "ctrl+r":
-			if !m.loading {
-				m.loading = true
-				m.status = "Refreshing…"
-				return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
-			}
-		case "enter":
-			if url := m.selectedURL(); url != "" {
-				_ = openInBrowser(url)
-			}
-		case "c":
-			if url := m.selectedURL(); url != "" {
-				if err := copyToClipboard(url); err != nil {
-					m.err = err.Error()
-				} else {
-					m.status = "Copied " + url
-				}
-			}
-		case "d", "backspace", "delete":
-			if url := m.selectedURL(); url != "" {
-				m.confirmDelete = true
-				m.pendingDelete = url
-				return m, nil
-			}
+		if model, cmd, handled := m.handleKey(msg.String()); handled {
+			return model, cmd
 		}
 	case rowsReadyMsg:
-		m.loading = false
-		if msg.err != nil {
-			m.err = msg.err.Error()
-			m.rows = nil
-			m.table.SetRows(nil)
-			return m, nil
-		}
-		m.err = ""
-		m.rows = msg.results
-		m.table.SetRows(rowsToTableRows(msg.results))
-		m.status = summary(msg.results)
+		m.handleRowsReady(msg)
+		return m, nil
 	case autoRefreshTickMsg:
-		// Re-arm the tick first so the cadence stays steady even if a fetch
-		// is already in flight. Skip the fetch when one is in flight, when
-		// the user is in a confirmation prompt, or when auto-refresh was
-		// disabled at runtime.
-		next := m.autoRefreshCmd()
-		if next == nil {
-			return m, nil
-		}
-		if m.loading || m.confirmArchive || m.confirmDelete {
-			return m, next
-		}
-		m.loading = true
-		m.status = "Auto-refreshing…"
-		return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client), next)
+		return m, m.handleAutoRefresh()
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -281,6 +184,131 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.table, cmd = m.table.Update(msg)
 	return m, cmd
+}
+
+func (m *Model) handleKey(key string) (tea.Model, tea.Cmd, bool) {
+	if m.confirmArchive {
+		model, cmd := m.handleArchiveConfirm(key)
+		return model, cmd, true
+	}
+	if m.confirmDelete {
+		model, cmd := m.handleDeleteConfirm(key)
+		return model, cmd, true
+	}
+	return m.handleNormalKey(key)
+}
+
+func (m *Model) handleArchiveConfirm(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "y", "Y":
+		if _, err := m.store.MoveActiveToReviewed(m.pendingArchive); err != nil {
+			m.err = err.Error()
+			m.confirmArchive = false
+			m.pendingArchive = nil
+			return m, nil
+		}
+		return m, tea.Quit
+	case "n", "N", "q", "ctrl+c", "esc", "enter":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m *Model) handleDeleteConfirm(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "y", "Y":
+		url := m.pendingDelete
+		m.confirmDelete = false
+		m.pendingDelete = ""
+		if _, err := m.store.Remove(url); err != nil {
+			m.err = err.Error()
+			return m, nil
+		}
+		m.status = "Removed " + url
+		kept := m.rows[:0:0]
+		for _, r := range m.rows {
+			if r.URL != url {
+				kept = append(kept, r)
+			}
+		}
+		m.rows = kept
+		m.table.SetRows(rowsToTableRows(m.rows))
+		m.loading = true
+		return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
+	case "n", "N", "esc":
+		m.confirmDelete = false
+		m.pendingDelete = ""
+		m.status = "Delete cancelled"
+		return m, nil
+	}
+	return m, nil
+}
+
+// handleAutoRefresh re-arms the auto-refresh tick and, when idle, kicks
+// off a background fetch. Returns the next tea.Cmd to run.
+func (m *Model) handleAutoRefresh() tea.Cmd {
+	next := m.autoRefreshCmd()
+	if next == nil {
+		return nil
+	}
+	if m.loading || m.confirmArchive || m.confirmDelete {
+		return next
+	}
+	m.loading = true
+	m.status = "Auto-refreshing…"
+	return tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client), next)
+}
+
+func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
+	switch key {
+	case "q", "ctrl+c", "esc":
+		terminal := m.terminalURLs()
+		if len(terminal) == 0 {
+			return m, tea.Quit, true
+		}
+		m.confirmArchive = true
+		m.pendingArchive = terminal
+		return m, nil, true
+	case "r", "ctrl+r":
+		if !m.loading {
+			m.loading = true
+			m.status = "Refreshing…"
+			return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client)), true
+		}
+	case "enter":
+		if url := m.selectedURL(); url != "" {
+			_ = openInBrowser(url)
+		}
+	case "c":
+		if url := m.selectedURL(); url != "" {
+			if err := copyToClipboard(url); err != nil {
+				m.err = err.Error()
+			} else {
+				m.status = "Copied " + url
+			}
+		}
+	case "d", "backspace", "delete":
+		if url := m.selectedURL(); url != "" {
+			m.confirmDelete = true
+			m.pendingDelete = url
+			return m, nil, true
+		}
+	}
+	return m, nil, false
+}
+
+func (m *Model) handleRowsReady(msg rowsReadyMsg) {
+	m.loading = false
+	if msg.err != nil {
+		m.err = msg.err.Error()
+		m.rows = nil
+		m.table.SetRows(nil)
+		return
+	}
+	m.err = ""
+	m.rows = msg.results
+	m.table.SetRows(rowsToTableRows(msg.results))
+	m.status = summary(msg.results)
 }
 
 func (m *Model) View() string {

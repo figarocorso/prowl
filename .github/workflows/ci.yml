@@ -13,7 +13,10 @@ permissions:
   actions: read
 
 env:
-  COVERAGE_THRESHOLD: "55"
+  # Bumped from 55 -> 60 (current total is ~60.7%). The TODO target is 70,
+  # but raising the gate that high would require a substantial test push
+  # across cmd/* and internal/data first. Tracked in TODO.md.
+  COVERAGE_THRESHOLD: "60"
 
 jobs:
   test:
@@ -61,6 +64,104 @@ jobs:
         uses: golangci/golangci-lint-action@v8
         with:
           version: latest
+
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go-version: [stable]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: go build
+        run: go build ./...
+
+  complexity:
+    name: complexity gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      # Thresholds are intentionally above current hotspots so this job acts as
+      # a regression gate, not an instant-fail. As of this PR, the worst
+      # offenders are:
+      #   gocyclo:  mcp.toolListPRs = 16, cmd.renderTable = 15
+      #   gocognit: cmd.renderTable = 27, mcp.toolListPRs = 21
+      # Tighten these once those functions are decomposed.
+      - name: install gocyclo / gocognit
+        run: |
+          go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+          go install github.com/uudashr/gocognit/cmd/gocognit@latest
+
+      - name: gocyclo (fail >30)
+        run: $(go env GOPATH)/bin/gocyclo -over 30 .
+
+      - name: gocognit (fail >50)
+        run: $(go env GOPATH)/bin/gocognit -over 50 .
+
+  govulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: govulncheck ./...
+        run: $(go env GOPATH)/bin/govulncheck ./...
+
+  dependency-review:
+    name: dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+
+  trivy:
+    name: trivy fs scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  osv-scanner:
+    name: osv-scanner
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            ./
 
   coverage-report:
     name: coverage delta comment
