@@ -212,13 +212,24 @@ func smartColumnWidths(rows [][]tableCell, headers []string, termWidth int) []in
 		return nil
 	}
 	cols := len(rows[0])
+	titleIdx := cols - 1
+	widths, hasContent := initColWidths(headers, rows[1:])
+	collapseEmptyCols(widths, hasContent, headers)
+	widths[titleIdx] = sizeTitleColumn(widths, rows[1:], headers, termWidth, titleIdx)
+	return widths
+}
+
+// initColWidths seeds widths from headers and grows each to fit the widest
+// cell in the data rows. Returns the widths and a per-column "has real value"
+// flag (so callers can collapse empty placeholder columns to header width).
+func initColWidths(headers []string, dataRows [][]tableCell) ([]int, []bool) {
+	cols := len(headers)
 	widths := make([]int, cols)
 	hasContent := make([]bool, cols)
 	for i, h := range headers {
 		widths[i] = lipgloss.Width(h)
 	}
-	// rows[0] is the header — skip it when looking for content.
-	for _, row := range rows[1:] {
+	for _, row := range dataRows {
 		for i, c := range row {
 			if w := lipgloss.Width(c.raw); w > widths[i] {
 				widths[i] = w
@@ -228,36 +239,44 @@ func smartColumnWidths(rows [][]tableCell, headers []string, termWidth int) []in
 			}
 		}
 	}
+	return widths, hasContent
+}
+
+// collapseEmptyCols resets a column to its header width when none of its
+// data rows contained a meaningful value.
+func collapseEmptyCols(widths []int, hasContent []bool, headers []string) {
 	for i, h := range headers {
 		if !hasContent[i] {
 			widths[i] = lipgloss.Width(h)
 		}
 	}
-	titleIdx := cols - 1
-	// Title gets the leftover terminal width when we can detect a TTY; the
-	// fallback cap keeps piped output sane.
+}
+
+// sizeTitleColumn picks a width for the Title column: when termWidth > 0 the
+// Title gets the leftover terminal width (capped by the longest title and
+// clamped to minTitleWidth); otherwise it falls back to titleFallbackWidth.
+func sizeTitleColumn(widths []int, dataRows [][]tableCell, headers []string, termWidth, titleIdx int) int {
 	maxTitle := 0
-	for _, row := range rows[1:] {
+	for _, row := range dataRows {
 		if w := lipgloss.Width(row[titleIdx].raw); w > maxTitle {
 			maxTitle = w
 		}
 	}
+	var w int
 	if termWidth > 0 {
 		used := 0
-		for i, w := range widths {
+		for i, cw := range widths {
 			if i == titleIdx {
 				continue
 			}
-			used += w + 2 // gap between columns
+			used += cw + 2 // gap between columns
 		}
-		remaining := termWidth - used
-		remaining = max(remaining, minTitleWidth)
-		widths[titleIdx] = min(remaining, maxTitle)
+		remaining := max(termWidth-used, minTitleWidth)
+		w = min(remaining, maxTitle)
 	} else {
-		widths[titleIdx] = min(maxTitle, titleFallbackWidth)
+		w = min(maxTitle, titleFallbackWidth)
 	}
-	widths[titleIdx] = max(widths[titleIdx], lipgloss.Width(headers[titleIdx]))
-	return widths
+	return max(w, lipgloss.Width(headers[titleIdx]))
 }
 
 func printTableRow(out io.Writer, row []tableCell, widths []int) {

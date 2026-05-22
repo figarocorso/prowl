@@ -156,12 +156,26 @@ func tableColumns() []table.Column {
 // (or just its header when the column has no real content), then hands the
 // remaining terminal width to the Title column.
 func (m *Model) recomputeColumnWidths() {
+	widths, hasContent := tuiColWidthsFromRows(m.rows)
+	finalizeTuiColWidths(widths, hasContent)
+	titleIdx := len(columnHeaders) - 1
+	widths[titleIdx] = expandTitleWidth(widths, titleIdx, m.width)
+	cols := make([]table.Column, len(columnHeaders))
+	for i, h := range columnHeaders {
+		cols[i] = table.Column{Title: h, Width: widths[i]}
+	}
+	m.table.SetColumns(cols)
+}
+
+// tuiColWidthsFromRows seeds widths from columnHeaders and grows each to fit
+// the widest rendered cell in rows.
+func tuiColWidthsFromRows(rows []data.Result) ([]int, []bool) {
 	widths := make([]int, len(columnHeaders))
 	hasContent := make([]bool, len(columnHeaders))
 	for i, h := range columnHeaders {
 		widths[i] = lipgloss.Width(h)
 	}
-	for _, r := range m.rows {
+	for _, r := range rows {
 		for i, c := range resultCells(r) {
 			if w := lipgloss.Width(c); w > widths[i] {
 				widths[i] = w
@@ -171,36 +185,40 @@ func (m *Model) recomputeColumnWidths() {
 			}
 		}
 	}
+	return widths, hasContent
+}
+
+// finalizeTuiColWidths collapses empty columns to header width and applies
+// the per-column breathing pad.
+func finalizeTuiColWidths(widths []int, hasContent []bool) {
 	for i, h := range columnHeaders {
 		if !hasContent[i] {
 			widths[i] = lipgloss.Width(h)
 		}
 		widths[i] += columnPad
 	}
-	titleIdx := len(columnHeaders) - 1
-	if m.width > 0 {
-		used := 0
-		for i, w := range widths {
-			if i == titleIdx {
-				continue
-			}
-			used += w
-		}
-		// bubbles table reserves a leading space per column; leave a small slack
-		// so the last column doesn't overflow the terminal.
-		remaining := m.width - used - len(columnHeaders) - 1
-		if remaining > widths[titleIdx] {
-			widths[titleIdx] = remaining
-		}
-		if widths[titleIdx] < minTitleWidth {
-			widths[titleIdx] = minTitleWidth
-		}
+}
+
+// expandTitleWidth grows the Title column to soak up any remaining terminal
+// width while staying above minTitleWidth.
+func expandTitleWidth(widths []int, titleIdx, termWidth int) int {
+	if termWidth <= 0 {
+		return widths[titleIdx]
 	}
-	cols := make([]table.Column, len(columnHeaders))
-	for i, h := range columnHeaders {
-		cols[i] = table.Column{Title: h, Width: widths[i]}
+	used := 0
+	for i, w := range widths {
+		if i == titleIdx {
+			continue
+		}
+		used += w
 	}
-	m.table.SetColumns(cols)
+	// bubbles table reserves a leading space per column; leave a small slack
+	// so the last column doesn't overflow the terminal.
+	remaining := termWidth - used - len(columnHeaders) - 1
+	if remaining > widths[titleIdx] {
+		widths[titleIdx] = remaining
+	}
+	return max(widths[titleIdx], minTitleWidth)
 }
 
 func (m *Model) Init() tea.Cmd {
