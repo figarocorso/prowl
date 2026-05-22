@@ -4,6 +4,12 @@ All notable changes to prowl are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-05-22
+
+### Added
+- Homebrew tap publishing via GoReleaser. Install with
+  `brew install figarocorso/tap/prowl`.
+
 ## [0.1.0] - 2026-05-22
 
 First stable Go release. The legacy `prowl.sh` Bash script moves to
@@ -24,4 +30,5 @@ same data directory.
 - `scripts/parity-check.sh` to diff Go vs legacy bash output during the
   cutover window.
 
+[0.1.1]: https://github.com/figarocorso/prowl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/figarocorso/prowl/releases/tag/v0.1.0
