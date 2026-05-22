@@ -99,54 +99,77 @@ func filterOpen(in []data.Result) []data.Result {
 	return out
 }
 
+type tableCell struct{ raw, rendered string }
+
 func renderTable(out io.Writer, results []data.Result) error {
 	plain := ui.IsPlain(out)
 	headers := []string{"PR", "Assignee", "Status", "Queue", "Pos", "ETA", "URL"}
+	rows := buildTableRows(plain, headers, results)
+	widths := columnWidths(rows)
+	for _, row := range rows {
+		printTableRow(out, row, widths)
+	}
+	return nil
+}
 
-	type cell struct{ raw, rendered string }
-	rows := make([][]cell, 0, len(results)+1)
-
-	headerRow := make([]cell, len(headers))
+func buildTableRows(plain bool, headers []string, results []data.Result) [][]tableCell {
+	rows := make([][]tableCell, 0, len(results)+1)
+	header := make([]tableCell, len(headers))
 	for i, h := range headers {
-		headerRow[i] = cell{raw: h, rendered: ui.Header(plain, h)}
+		header[i] = tableCell{raw: h, rendered: ui.Header(plain, h)}
 	}
-	rows = append(rows, headerRow)
-
+	rows = append(rows, header)
 	for _, r := range results {
-		var raw [7]string
-		if r.Err != nil {
-			raw = [7]string{"?", "-", "error", "-", "-", "-", r.URL}
-		} else {
-			pr := r.PR
-			num := "?"
-			if pr.Number > 0 {
-				num = fmt.Sprintf("#%d", pr.Number)
-			}
-			raw = [7]string{
-				num,
-				data.AssigneesLabel(pr),
-				data.StatusLabel(pr),
-				data.QueueLabel(pr),
-				data.QueuePositionLabel(pr),
-				data.ETALabel(pr),
-				pr.URL,
-			}
-		}
-		row := make([]cell, 7)
-		for i, v := range raw {
-			rendered := v
-			switch i {
-			case 2:
-				rendered = ui.StatusBadge(plain, v)
-			case 6:
-				rendered = ui.Dim(plain, v)
-			}
-			row[i] = cell{raw: v, rendered: rendered}
-		}
-		rows = append(rows, row)
+		rows = append(rows, resultToRow(plain, r))
 	}
+	return rows
+}
 
-	widths := make([]int, len(headers))
+func resultToRow(plain bool, r data.Result) []tableCell {
+	raw := rawRowValues(r)
+	row := make([]tableCell, len(raw))
+	for i, v := range raw {
+		row[i] = tableCell{raw: v, rendered: renderCellValue(plain, i, v)}
+	}
+	return row
+}
+
+func rawRowValues(r data.Result) [7]string {
+	if r.Err != nil {
+		return [7]string{"?", "-", "error", "-", "-", "-", r.URL}
+	}
+	pr := r.PR
+	num := "?"
+	if pr.Number > 0 {
+		num = fmt.Sprintf("#%d", pr.Number)
+	}
+	return [7]string{
+		num,
+		data.AssigneesLabel(pr),
+		data.StatusLabel(pr),
+		data.QueueLabel(pr),
+		data.QueuePositionLabel(pr),
+		data.ETALabel(pr),
+		pr.URL,
+	}
+}
+
+func renderCellValue(plain bool, col int, v string) string {
+	switch col {
+	case 2:
+		return ui.StatusBadge(plain, v)
+	case 6:
+		return ui.Dim(plain, v)
+	default:
+		return v
+	}
+}
+
+func columnWidths(rows [][]tableCell) []int {
+	if len(rows) == 0 {
+		return nil
+	}
+	widths := make([]int, len(rows[0]))
 	for _, row := range rows {
 		for i, c := range row {
 			if w := lipgloss.Width(c.raw); w > widths[i] {
@@ -154,22 +177,19 @@ func renderTable(out io.Writer, results []data.Result) error {
 			}
 		}
 	}
+	return widths
+}
 
-	for _, row := range rows {
-		for i, c := range row {
-			if i == len(row)-1 {
-				fmt.Fprint(out, c.rendered)
-				continue
-			}
-			pad := widths[i] - lipgloss.Width(c.raw) + 2
-			if pad < 1 {
-				pad = 1
-			}
-			fmt.Fprint(out, c.rendered, strings.Repeat(" ", pad))
+func printTableRow(out io.Writer, row []tableCell, widths []int) {
+	for i, c := range row {
+		if i == len(row)-1 {
+			fmt.Fprint(out, c.rendered)
+			continue
 		}
-		fmt.Fprintln(out)
+		pad := max(widths[i]-lipgloss.Width(c.raw)+2, 1)
+		fmt.Fprint(out, c.rendered, strings.Repeat(" ", pad))
 	}
-	return nil
+	fmt.Fprintln(out)
 }
 
 type jsonRow struct {

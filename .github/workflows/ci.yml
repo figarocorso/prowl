@@ -95,22 +95,20 @@ jobs:
           go-version: stable
           cache: true
 
-      # Thresholds are intentionally above current hotspots so this job acts as
-      # a regression gate, not an instant-fail. As of this PR, the worst
-      # offenders are:
-      #   gocyclo:  mcp.toolListPRs = 16, cmd.renderTable = 15
-      #   gocognit: cmd.renderTable = 27, mcp.toolListPRs = 21
-      # Tighten these once those functions are decomposed.
+      # Tightened from >30 / >50 to >15 / >20 after decomposing the previous
+      # hotspots (mcp.toolListPRs, cmd.renderTable, tui.Update). Current worst:
+      #   gocyclo:  tui.handleNormalKey = 12
+      #   gocognit: tui.handleNormalKey = 15
       - name: install gocyclo / gocognit
         run: |
           go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
           go install github.com/uudashr/gocognit/cmd/gocognit@latest
 
-      - name: gocyclo (fail >30)
-        run: $(go env GOPATH)/bin/gocyclo -over 30 .
+      - name: gocyclo (fail >15)
+        run: $(go env GOPATH)/bin/gocyclo -over 15 .
 
-      - name: gocognit (fail >50)
-        run: $(go env GOPATH)/bin/gocognit -over 50 .
+      - name: gocognit (fail >20)
+        run: $(go env GOPATH)/bin/gocognit -over 20 .
 
   govulncheck:
     name: govulncheck

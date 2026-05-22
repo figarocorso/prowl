@@ -143,72 +143,79 @@ func boolArg(args map[string]any, key string) bool {
 }
 
 func (s *Server) toolListPRs(ctx context.Context, args map[string]any) (toolResult, error) {
-	source := strings.ToLower(stringArg(args, "source"))
-	if source == "" {
-		source = "active"
-	}
-	var urls []string
-	var err error
-	switch source {
-	case "active":
-		urls, err = s.store.Active()
-	case "reviewed":
-		urls, err = s.store.Reviewed()
-	case "all":
-		a, aerr := s.store.Active()
-		if aerr != nil {
-			return toolResult{}, aerr
-		}
-		r, rerr := s.store.Reviewed()
-		if rerr != nil {
-			return toolResult{}, rerr
-		}
-		urls = append(urls, a...)
-		urls = append(urls, r...)
-	default:
-		return toolResult{}, fmt.Errorf("invalid source %q", source)
-	}
+	urls, err := s.listSourceURLs(stringArg(args, "source"))
 	if err != nil {
 		return toolResult{}, err
 	}
-
 	results := s.client.FetchBatch(ctx, urls)
+	rows := filterPRRows(results, stringArg(args, "status"), stringArg(args, "assignee"))
+	return jsonResult(rows), nil
+}
 
-	statusFilter := strings.ToLower(stringArg(args, "status"))
-	assigneeFilter := stringArg(args, "assignee")
+func (s *Server) listSourceURLs(source string) ([]string, error) {
+	source = strings.ToLower(source)
+	if source == "" {
+		source = "active"
+	}
+	switch source {
+	case "active":
+		return s.store.Active()
+	case "reviewed":
+		return s.store.Reviewed()
+	case "all":
+		a, err := s.store.Active()
+		if err != nil {
+			return nil, err
+		}
+		r, err := s.store.Reviewed()
+		if err != nil {
+			return nil, err
+		}
+		return append(a, r...), nil
+	default:
+		return nil, fmt.Errorf("invalid source %q", source)
+	}
+}
 
+func filterPRRows(results []data.Result, statusFilter, assigneeFilter string) []map[string]any {
+	statusFilter = strings.ToLower(statusFilter)
 	rows := make([]map[string]any, 0, len(results))
 	for _, r := range results {
-		row := map[string]any{"url": r.URL}
-		if r.Err != nil {
-			row["error"] = r.Err.Error()
+		if row, ok := buildPRRow(r, statusFilter, assigneeFilter); ok {
 			rows = append(rows, row)
-			continue
 		}
-		pr := r.PR
-		status := data.StatusLabel(pr)
-		if statusFilter != "" && !strings.EqualFold(status, statusFilter) {
-			continue
-		}
-		if assigneeFilter != "" && !containsFold(pr.Assignees, assigneeFilter) {
-			continue
-		}
-		row["number"] = pr.Number
-		row["title"] = pr.Title
-		row["state"] = pr.State
-		row["status"] = status
-		row["is_draft"] = pr.IsDraft
-		row["assignees"] = pr.Assignees
-		if pr.Queue != nil {
-			row["queue_state"] = pr.Queue.State
-			row["queue_position"] = pr.Queue.Position
-			if pr.Queue.ETA > 0 {
-				row["queue_eta_seconds"] = int(pr.Queue.ETA.Seconds())
-			}
-		}
-		rows = append(rows, row)
 	}
-	return jsonResult(rows), nil
+	return rows
+}
+
+func buildPRRow(r data.Result, statusFilter, assigneeFilter string) (map[string]any, bool) {
+	row := map[string]any{"url": r.URL}
+	if r.Err != nil {
+		row["error"] = r.Err.Error()
+		return row, true
+	}
+	pr := r.PR
+	status := data.StatusLabel(pr)
+	if statusFilter != "" && !strings.EqualFold(status, statusFilter) {
+		return nil, false
+	}
+	if assigneeFilter != "" && !containsFold(pr.Assignees, assigneeFilter) {
+		return nil, false
+	}
+	row["number"] = pr.Number
+	row["title"] = pr.Title
+	row["state"] = pr.State
+	row["status"] = status
+	row["is_draft"] = pr.IsDraft
+	row["assignees"] = pr.Assignees
+	if pr.Queue != nil {
+		row["queue_state"] = pr.Queue.State
+		row["queue_position"] = pr.Queue.Position
+		if pr.Queue.ETA > 0 {
+			row["queue_eta_seconds"] = int(pr.Queue.ETA.Seconds())
+		}
+	}
+	return row, true
 }
 
 func (s *Server) toolGetPR(ctx context.Context, args map[string]any) (toolResult, error) {
