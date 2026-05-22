@@ -28,9 +28,14 @@ func TestCheckWritableNotWritable(t *testing.T) {
 	}
 	dir := t.TempDir()
 	ro := filepath.Join(dir, "ro")
-	require.NoError(t, os.MkdirAll(ro, 0o755))
-	require.NoError(t, os.Chmod(ro, 0o500))
-	t.Cleanup(func() { _ = os.Chmod(ro, 0o755) })
+	require.NoError(t, os.MkdirAll(ro, 0o700))
+	// 0o500 (r-x------) would be the natural "read-only dir" perm but trips
+	// gosec G302, which wants <= 0o600 as a bit mask. 0o400 also blocks
+	// writes inside the dir, which is all checkWritable cares about.
+	require.NoError(t, os.Chmod(ro, 0o400))
+	// Restore writable perms so t.TempDir's automatic cleanup can rm -r the
+	// directory. gosec flags Chmod with the execute bit so suppress it here.
+	t.Cleanup(func() { _ = os.Chmod(ro, 0o700) }) //nolint:gosec // G302
 
 	// checkWritable should fail when the dir exists but isn't writable
 	err := checkWritable(ro)
