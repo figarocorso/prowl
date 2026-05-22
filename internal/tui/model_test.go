@@ -58,7 +58,7 @@ func TestModelRendersRows(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(120, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -83,7 +83,7 @@ func TestModelHeaderHasNoSideBorders(t *testing.T) {
 
 	var captured []byte
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		if strings.Contains(string(b), "#1234") {
+		if strings.Contains(string(b), "pull/1234") {
 			captured = append([]byte(nil), b...)
 			return true
 		}
@@ -94,11 +94,11 @@ func TestModelHeaderHasNoSideBorders(t *testing.T) {
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 
 	out := stripANSI(string(captured))
-	// Find the line containing "PR" header. It must NOT have side-border glyphs.
+	// Find the line containing "URL" header. It must NOT have side-border glyphs.
 	var headerLine string
 	for _, ln := range strings.Split(out, "\n") {
 		trim := strings.TrimSpace(ln)
-		if strings.HasPrefix(trim, "PR") && strings.Contains(ln, "Assignee") {
+		if strings.HasPrefix(trim, "URL") && strings.Contains(ln, "Assignee") {
 			headerLine = ln
 			break
 		}
@@ -106,18 +106,18 @@ func TestModelHeaderHasNoSideBorders(t *testing.T) {
 	require.NotEmpty(t, headerLine, "header line not found in output:\n%s", out)
 	require.NotContains(t, headerLine, "│", "header should have no vertical border glyphs")
 
-	// PR header column start must equal data column start.
-	prHeaderCol := strings.Index(headerLine, "PR")
+	// URL header column start must equal data column start.
+	urlHeaderCol := strings.Index(headerLine, "URL")
 	var dataLine string
 	for _, ln := range strings.Split(out, "\n") {
-		if strings.Contains(ln, "#1234") {
+		if strings.Contains(ln, "pull/1234") {
 			dataLine = ln
 			break
 		}
 	}
 	require.NotEmpty(t, dataLine)
-	prDataCol := strings.Index(dataLine, "#1234")
-	require.Equal(t, prHeaderCol, prDataCol, "PR header and row must start at same column\nheader: %q\nrow:    %q", headerLine, dataLine)
+	urlDataCol := strings.Index(dataLine, "acme/api/pull/1234")
+	require.Equal(t, urlHeaderCol, urlDataCol, "URL header and row must start at same column\nheader: %q\nrow:    %q", headerLine, dataLine)
 }
 
 func TestQuitPromptsArchiveWhenTerminalPRs(t *testing.T) {
@@ -130,7 +130,7 @@ func TestQuitPromptsArchiveWhenTerminalPRs(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -159,7 +159,7 @@ func TestQuitImmediateWhenNoTerminalPRs(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -175,7 +175,7 @@ func TestQuitArchivePromptDeclined(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -202,7 +202,7 @@ func TestDeletePromptsConfirmation(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -232,7 +232,7 @@ func TestDeleteRemovesRowImmediately(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234") && strings.Contains(string(b), "#1235")
+		return strings.Contains(string(b), "pull/1234") && strings.Contains(string(b), "pull/1235")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -244,7 +244,7 @@ func TestDeleteRemovesRowImmediately(t *testing.T) {
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
 		s := string(b)
-		return !strings.Contains(s, "#1234") && strings.Contains(s, "#1235")
+		return !strings.Contains(s, "pull/1234") && strings.Contains(s, "pull/1235")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -257,7 +257,7 @@ func TestDeletePromptCancelKeepsRow(t *testing.T) {
 	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
 
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -301,7 +301,7 @@ func TestAutoRefreshTickRefetches(t *testing.T) {
 
 	// Wait for the initial fetch to render.
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return strings.Contains(string(b), "#1234")
+		return strings.Contains(string(b), "pull/1234")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 	require.GreaterOrEqual(t, counter.calls.Load(), int32(1))
 
@@ -324,6 +324,119 @@ func TestAutoRefreshDisabledWhenIntervalZero(t *testing.T) {
 
 	m.SetRefreshInterval(10 * time.Second)
 	require.NotNil(t, m.autoRefreshCmd(), "auto refresh cmd should be set when interval is positive")
+}
+
+func sendString(tm *teatest.TestModel, s string) {
+	for _, r := range s {
+		if r == ' ' {
+			tm.Send(tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+			continue
+		}
+		tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+}
+
+func TestPaletteAddAddsPR(t *testing.T) {
+	m := newTestModel(t, nil)
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "no active PRs")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	sendString(tm, "add https://github.com/acme/api/pull/1234")
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "pull/1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+
+	active, err := m.store.Active()
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://github.com/acme/api/pull/1234"}, active)
+}
+
+func TestPaletteAddAcceptsPaste(t *testing.T) {
+	m := newTestModel(t, nil)
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "no active PRs")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("add ")})
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("https://github.com/acme/api/pull/1234")})
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "pull/1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+
+	active, err := m.store.Active()
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://github.com/acme/api/pull/1234"}, active)
+}
+
+func TestPaletteArchiveMovesTerminal(t *testing.T) {
+	urls := []string{
+		"https://github.com/acme/api/pull/1234",
+		"https://github.com/acme/api/pull/1198",
+	}
+	m := newTestModel(t, urls)
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "pull/1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	sendString(tm, "archive")
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "0 merged")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(3*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+
+	active, err := m.store.Active()
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://github.com/acme/api/pull/1234"}, active)
+	reviewed, err := m.store.Reviewed()
+	require.NoError(t, err)
+	require.Equal(t, []string{"https://github.com/acme/api/pull/1198"}, reviewed)
+}
+
+func TestPaletteUsageShowsOverlay(t *testing.T) {
+	m := newTestModel(t, []string{"https://github.com/acme/api/pull/1234"})
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "pull/1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(3*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	sendString(tm, "usage")
+	tm.Send(tea.KeyMsg{Type: tea.KeyEnter})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "prowl usage")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(3*time.Second))
+
+	require.NotEmpty(t, m.overlay)
+	require.Contains(t, m.overlay, "tracked total")
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
 }
 
 func TestModelSummary(t *testing.T) {

@@ -53,6 +53,46 @@ func QueueLabel(pr PR) string {
 	}
 }
 
+// QueueLabelShort returns a compact (<= 8 chars) queue state for table display.
+// QueueLabel keeps the verbose form for single-PR views like `prowl get`.
+func QueueLabelShort(pr PR) string {
+	if pr.Queue == nil {
+		return "-"
+	}
+	switch strings.ToUpper(pr.Queue.State) {
+	case "":
+		return "-"
+	case "AWAITING_CHECKS":
+		return "checks"
+	case "MERGEABLE":
+		return "ready"
+	case "LOCKED":
+		return "locked"
+	case "UNMERGEABLE":
+		return "blocked"
+	case "QUEUED":
+		return "queued"
+	default:
+		return strings.ToLower(pr.Queue.State)
+	}
+}
+
+// ShortURL trims the `https://github.com/` (or www / http) prefix so URLs
+// fit in a compact table column. Non-github URLs are returned unchanged.
+func ShortURL(u string) string {
+	for _, p := range []string{
+		"https://www.github.com/",
+		"https://github.com/",
+		"http://www.github.com/",
+		"http://github.com/",
+	} {
+		if strings.HasPrefix(u, p) {
+			return u[len(p):]
+		}
+	}
+	return u
+}
+
 // QueuePositionLabel renders the position column.
 func QueuePositionLabel(pr PR) string {
 	if pr.Queue == nil || pr.Queue.Position <= 0 {

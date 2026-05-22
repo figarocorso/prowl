@@ -78,9 +78,9 @@ func TestListTableHasHeader(t *testing.T) {
 
 	stdout, _, err := execCLI(t, "list")
 	require.NoError(t, err)
-	assert.Contains(t, stdout, "PR")
+	assert.Contains(t, stdout, "URL")
 	assert.Contains(t, stdout, "Status")
-	assert.Contains(t, stdout, "#1234")
+	assert.Contains(t, stdout, "acme/api/pull/1234")
 }
 
 func TestArchiveMovesTerminalPRs(t *testing.T) {
@@ -163,6 +163,63 @@ func TestWatchRejectsTooLowInterval(t *testing.T) {
 	err := runWatch(watchCmd, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least 5s")
+}
+
+func TestListSmartWidthsShrinkEmptyCols(t *testing.T) {
+	_, _ = setupCLI(t)
+	// Add a PR that has no queue → Queue/Pos/ETA all "-".
+	_, _, err := execCLI(t, "add", "https://github.com/acme/api/pull/1235")
+	require.NoError(t, err)
+
+	stdout, _, err := execCLI(t, "list")
+	require.NoError(t, err)
+
+	header := strings.Split(stdout, "\n")[0]
+	// Queue/Pos/ETA columns have no data → header-sized only.
+	queueIdx := strings.Index(header, "Queue")
+	posIdx := strings.Index(header, "Pos")
+	etaIdx := strings.Index(header, "ETA")
+	require.Greater(t, posIdx, queueIdx)
+	require.Greater(t, etaIdx, posIdx)
+	// "Queue" (5) + 2 pad → 7 cols until "Pos".
+	assert.Equal(t, 7, posIdx-queueIdx, "Queue column should size to its header when empty")
+	assert.Equal(t, 5, etaIdx-posIdx, "Pos column should size to its header when empty")
+}
+
+func TestStatsJSON(t *testing.T) {
+	_, _ = setupCLI(t)
+	for _, u := range []string{
+		"https://github.com/acme/api/pull/1234",
+		"https://github.com/acme/api/pull/1235",
+		"https://github.com/acme/api/pull/1198",
+	} {
+		_, _, err := execCLI(t, "add", u)
+		require.NoError(t, err)
+	}
+	_, _, err := execCLI(t, "archive")
+	require.NoError(t, err)
+
+	stdout, _, err := execCLI(t, "stats", "--json")
+	require.NoError(t, err)
+	var st data.Stats
+	require.NoError(t, json.Unmarshal([]byte(stdout), &st))
+	assert.Equal(t, 2, st.Active)
+	assert.Equal(t, 1, st.Reviewed)
+	assert.Equal(t, 3, st.Total)
+	assert.Equal(t, 1, st.Open)
+	assert.Equal(t, 1, st.Blocked)
+}
+
+func TestListShowsTitleColumn(t *testing.T) {
+	_, _ = setupCLI(t)
+	_, _, err := execCLI(t, "add", "https://github.com/acme/api/pull/1234")
+	require.NoError(t, err)
+
+	stdout, _, err := execCLI(t, "list")
+	require.NoError(t, err)
+	assert.Contains(t, stdout, "Title")
+	assert.Contains(t, stdout, "Add /healthz endpoint")
+	assert.NotContains(t, stdout, "https://github.com/acme/api/pull/1234")
 }
 
 func TestListOpenFilter(t *testing.T) {

@@ -54,14 +54,6 @@ func statusEmojiLabel(label string) string {
 	}
 }
 
-// queueEmojiLabel decorates the queue column with a small visual cue.
-func queueEmojiLabel(label string) string {
-	if label == "-" {
-		return label
-	}
-	return "🚦 " + label
-}
-
 // Model is the Bubble Tea state for prowl's TUI.
 type Model struct {
 	cfg             *config.Config
@@ -80,6 +72,9 @@ type Model struct {
 	confirmDelete   bool
 	pendingDelete   string
 	refreshInterval time.Duration
+	palette         bool
+	paletteInput    string
+	overlay         string
 }
 
 // SetRefreshInterval enables `prowl watch`-style auto-refresh by scheduling
@@ -137,16 +132,75 @@ func New(cfg *config.Config, s *store.Store, client data.PRClient) *Model {
 	}
 }
 
+var columnHeaders = []string{"URL", "Assignee", "Status", "Queue", "Pos", "ETA", "Title"}
+
+// columnPad is the extra breathing room added to each non-Title column on top
+// of its widest cell.
+const columnPad = 2
+
+// minTitleWidth keeps the Title column readable when the terminal is narrow.
+const minTitleWidth = 20
+
+// tableColumns returns the initial column set used before the first row fetch
+// completes. recomputeColumnWidths replaces them once row content + terminal
+// width are known.
 func tableColumns() []table.Column {
-	return []table.Column{
-		{Title: "PR", Width: 7},
-		{Title: "Assignee", Width: 18},
-		{Title: "Status", Width: 16},
-		{Title: "Queue", Width: 28},
-		{Title: "Pos", Width: 4},
-		{Title: "ETA", Width: 6},
-		{Title: "URL", Width: 50},
+	cols := make([]table.Column, len(columnHeaders))
+	for i, h := range columnHeaders {
+		cols[i] = table.Column{Title: h, Width: lipgloss.Width(h) + columnPad}
 	}
+	return cols
+}
+
+// recomputeColumnWidths sizes each non-Title column to fit its widest cell
+// (or just its header when the column has no real content), then hands the
+// remaining terminal width to the Title column.
+func (m *Model) recomputeColumnWidths() {
+	widths := make([]int, len(columnHeaders))
+	hasContent := make([]bool, len(columnHeaders))
+	for i, h := range columnHeaders {
+		widths[i] = lipgloss.Width(h)
+	}
+	for _, r := range m.rows {
+		for i, c := range resultCells(r) {
+			if w := lipgloss.Width(c); w > widths[i] {
+				widths[i] = w
+			}
+			if c != "" && c != "-" {
+				hasContent[i] = true
+			}
+		}
+	}
+	for i, h := range columnHeaders {
+		if !hasContent[i] {
+			widths[i] = lipgloss.Width(h)
+		}
+		widths[i] += columnPad
+	}
+	titleIdx := len(columnHeaders) - 1
+	if m.width > 0 {
+		used := 0
+		for i, w := range widths {
+			if i == titleIdx {
+				continue
+			}
+			used += w
+		}
+		// bubbles table reserves a leading space per column; leave a small slack
+		// so the last column doesn't overflow the terminal.
+		remaining := m.width - used - len(columnHeaders) - 1
+		if remaining > widths[titleIdx] {
+			widths[titleIdx] = remaining
+		}
+		if widths[titleIdx] < minTitleWidth {
+			widths[titleIdx] = minTitleWidth
+		}
+	}
+	cols := make([]table.Column, len(columnHeaders))
+	for i, h := range columnHeaders {
+		cols[i] = table.Column{Title: h, Width: widths[i]}
+	}
+	m.table.SetColumns(cols)
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -163,7 +217,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.table.SetHeight(maxInt(msg.Height-6, 5))
+		m.recomputeColumnWidths()
 	case tea.KeyMsg:
+		if m.palette && !m.confirmArchive && !m.confirmDelete {
+			model, cmd := m.handlePaletteKey(msg)
+			return model, cmd
+		}
 		if model, cmd, handled := m.handleKey(msg.String()); handled {
 			return model, cmd
 		}
@@ -244,6 +303,136 @@ func (m *Model) handleDeleteConfirm(key string) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handlePaletteKey routes keystrokes typed inside the slash-command palette.
+// Enter runs the command, esc cancels, backspace edits. Plain text (single
+// keystrokes and clipboard pastes alike, both delivered as KeyRunes) is
+// appended verbatim.
+func (m *Model) handlePaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEsc, tea.KeyCtrlC:
+		m.palette = false
+		m.paletteInput = ""
+		m.status = "Palette closed"
+		return m, nil
+	case tea.KeyEnter:
+		input := strings.TrimSpace(m.paletteInput)
+		m.palette = false
+		m.paletteInput = ""
+		return m.runPaletteCommand(input)
+	case tea.KeyBackspace:
+		if r := []rune(m.paletteInput); len(r) > 0 {
+			m.paletteInput = string(r[:len(r)-1])
+		}
+		return m, nil
+	case tea.KeySpace:
+		m.paletteInput += " "
+		return m, nil
+	case tea.KeyRunes:
+		m.paletteInput += string(msg.Runes)
+		return m, nil
+	}
+	return m, nil
+}
+
+// runPaletteCommand parses and dispatches a palette command. The leading
+// slash, if any, is tolerated so users can type either `add ...` or `/add ...`.
+func (m *Model) runPaletteCommand(input string) (tea.Model, tea.Cmd) {
+	input = strings.TrimPrefix(input, "/")
+	if input == "" {
+		m.status = "Empty command"
+		return m, nil
+	}
+	parts := strings.Fields(input)
+	cmd := strings.ToLower(parts[0])
+	args := parts[1:]
+	switch cmd {
+	case "add":
+		return m.runPaletteAdd(args)
+	case "usage", "stats":
+		return m.runPaletteUsage()
+	case "archive", "clean":
+		return m.runPaletteArchive()
+	default:
+		m.err = "unknown command: " + cmd
+		m.status = "Try: add <url> · usage · archive"
+		return m, nil
+	}
+}
+
+func (m *Model) runPaletteAdd(args []string) (tea.Model, tea.Cmd) {
+	if len(args) == 0 {
+		m.err = "usage: add <pr_url>"
+		return m, nil
+	}
+	canonical, err := data.CanonicalURL(args[0])
+	if err != nil {
+		m.err = err.Error()
+		return m, nil
+	}
+	added, err := m.store.Add(canonical)
+	if err != nil {
+		m.err = err.Error()
+		return m, nil
+	}
+	if !added {
+		m.status = "Already tracked: " + canonical
+		return m, nil
+	}
+	m.status = "Added " + canonical + " — refreshing…"
+	m.err = ""
+	m.loading = true
+	return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
+}
+
+func (m *Model) runPaletteUsage() (tea.Model, tea.Cmd) {
+	reviewed, err := m.store.Reviewed()
+	if err != nil {
+		m.err = err.Error()
+		return m, nil
+	}
+	stats := data.ComputeStats(m.rows, len(reviewed))
+	m.overlay = formatUsage(stats)
+	m.status = "Usage overlay - press esc to close"
+	return m, nil
+}
+
+func (m *Model) runPaletteArchive() (tea.Model, tea.Cmd) {
+	terminal := m.terminalURLs()
+	if len(terminal) == 0 {
+		m.status = "Nothing to archive"
+		return m, nil
+	}
+	moved, err := m.store.MoveActiveToReviewed(terminal)
+	if err != nil {
+		m.err = err.Error()
+		return m, nil
+	}
+	m.status = fmt.Sprintf("Archived %d PR(s) — refreshing…", moved)
+	m.err = ""
+	m.loading = true
+	return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
+}
+
+func formatUsage(s data.Stats) string {
+	var b strings.Builder
+	b.WriteString(okStyle.Render("📊 prowl usage") + "\n\n")
+	fmt.Fprintf(&b, "  tracked total : %d\n", s.Total)
+	fmt.Fprintf(&b, "  active        : %d\n", s.Active)
+	fmt.Fprintf(&b, "  reviewed      : %d\n\n", s.Reviewed)
+	fmt.Fprintf(&b, "  🟢 open        : %d\n", s.Open)
+	fmt.Fprintf(&b, "  📝 draft       : %d\n", s.Draft)
+	fmt.Fprintf(&b, "  ⛔ blocked     : %d\n", s.Blocked)
+	fmt.Fprintf(&b, "  🟣 merged      : %d\n", s.Merged)
+	fmt.Fprintf(&b, "  🔴 closed      : %d\n", s.Closed)
+	if s.Queued > 0 {
+		fmt.Fprintf(&b, "  🚦 queued      : %d\n", s.Queued)
+	}
+	if s.Errors > 0 {
+		fmt.Fprintf(&b, "  ⚠ errors      : %d\n", s.Errors)
+	}
+	return b.String()
+}
+
 // handleAutoRefresh re-arms the auto-refresh tick and, when idle, kicks
 // off a background fetch. Returns the next tea.Cmd to run.
 func (m *Model) handleAutoRefresh() tea.Cmd {
@@ -261,7 +450,27 @@ func (m *Model) handleAutoRefresh() tea.Cmd {
 
 func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
 	switch key {
-	case "q", "ctrl+c", "esc":
+	case "/", ":":
+		m.palette = true
+		m.paletteInput = ""
+		m.overlay = ""
+		m.err = ""
+		m.status = "Command palette — type add <url>, usage, archive · esc cancels"
+		return m, nil, true
+	case "esc":
+		if m.overlay != "" {
+			m.overlay = ""
+			m.status = "Overlay closed"
+			return m, nil, true
+		}
+		terminal := m.terminalURLs()
+		if len(terminal) == 0 {
+			return m, tea.Quit, true
+		}
+		m.confirmArchive = true
+		m.pendingArchive = terminal
+		return m, nil, true
+	case "q", "ctrl+c":
 		terminal := m.terminalURLs()
 		if len(terminal) == 0 {
 			return m, tea.Quit, true
@@ -308,6 +517,7 @@ func (m *Model) handleRowsReady(msg rowsReadyMsg) {
 	m.err = ""
 	m.rows = msg.results
 	m.table.SetRows(rowsToTableRows(msg.results))
+	m.recomputeColumnWidths()
 	m.status = summary(msg.results)
 }
 
@@ -328,10 +538,15 @@ func (m *Model) View() string {
 	}
 
 	if len(m.rows) == 0 && !m.loading {
-		b.WriteString(okStyle.Render("📭 no active PRs — `prowl add <url>` to track one\n"))
+		b.WriteString(okStyle.Render("📭 no active PRs — `prowl add <url>` or press `/` then `add <url>`\n"))
 	} else {
 		b.WriteString(m.table.View())
 		b.WriteString("\n")
+	}
+
+	if m.overlay != "" {
+		b.WriteString("\n")
+		b.WriteString(m.overlay)
 	}
 
 	switch {
@@ -341,6 +556,9 @@ func (m *Model) View() string {
 	case m.confirmDelete:
 		prompt := fmt.Sprintf("\n🗑  Delete %s? [y/N]", m.pendingDelete)
 		b.WriteString(confirmStyle.Render(prompt))
+	case m.palette:
+		b.WriteString("\n" + confirmStyle.Render("/"+m.paletteInput+"▌"))
+		b.WriteString(hintStyle.Render("   (commands: add <url>, usage, archive · esc cancels)"))
 	default:
 		hints := []string{
 			keyStyle.Render("↑↓") + hintStyle.Render(" nav"),
@@ -348,6 +566,7 @@ func (m *Model) View() string {
 			keyStyle.Render("c") + hintStyle.Render(" copy"),
 			keyStyle.Render("d") + hintStyle.Render(" delete"),
 			keyStyle.Render("r") + hintStyle.Render(" refresh"),
+			keyStyle.Render("/") + hintStyle.Render(" cmd"),
 			keyStyle.Render("q") + hintStyle.Render(" quit"),
 		}
 		b.WriteString("\n" + strings.Join(hints, hintStyle.Render(" · ")))
@@ -369,34 +588,38 @@ func (m *Model) terminalURLs() []string {
 }
 
 func (m *Model) selectedURL() string {
-	row := m.table.SelectedRow()
-	if len(row) < 7 {
+	cursor := m.table.Cursor()
+	if cursor < 0 || cursor >= len(m.rows) {
 		return ""
 	}
-	return row[6]
+	return m.rows[cursor].URL
+}
+
+// resultCells returns the raw column values for a single result, in the order
+// declared by columnHeaders.
+func resultCells(r data.Result) []string {
+	if r.Err != nil {
+		return []string{data.ShortURL(r.URL), "-", statusEmojiLabel("error"), "-", "-", "-", "-"}
+	}
+	pr := r.PR
+	return []string{
+		data.ShortURL(pr.URL),
+		data.AssigneesLabel(pr),
+		statusEmojiLabel(data.StatusLabel(pr)),
+		data.QueueLabelShort(pr),
+		data.QueuePositionLabel(pr),
+		data.ETALabel(pr),
+		pr.Title,
+	}
 }
 
 func rowsToTableRows(results []data.Result) []table.Row {
 	out := make([]table.Row, 0, len(results))
 	for _, r := range results {
-		if r.Err != nil {
-			out = append(out, table.Row{"?", "-", statusEmojiLabel("error"), "-", "-", "-", r.URL})
-			continue
-		}
-		pr := r.PR
-		num := "?"
-		if pr.Number > 0 {
-			num = fmt.Sprintf("#%d", pr.Number)
-		}
-		out = append(out, table.Row{
-			num,
-			data.AssigneesLabel(pr),
-			statusEmojiLabel(data.StatusLabel(pr)),
-			queueEmojiLabel(data.QueueLabel(pr)),
-			data.QueuePositionLabel(pr),
-			data.ETALabel(pr),
-			pr.URL,
-		})
+		cells := resultCells(r)
+		row := make(table.Row, len(cells))
+		copy(row, cells)
+		out = append(out, row)
 	}
 	return out
 }
