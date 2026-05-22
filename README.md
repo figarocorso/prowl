@@ -41,6 +41,15 @@ prowl check
 If the command is not found after installing, the directory holding the
 binary is not on your shell `PATH` — see the notes under each method.
 
+### Homebrew (macOS / Linux)
+
+```sh
+brew install figarocorso/tap/prowl
+```
+
+The tap lives at [`figarocorso/homebrew-tap`](https://github.com/figarocorso/homebrew-tap)
+and is updated automatically on every release.
+
 ### `go install`
 
 ```sh
@@ -78,10 +87,6 @@ go build -o prowl .
 sudo mv prowl /usr/local/bin/prowl     # or copy under any $PATH dir you own
 ```
 
-### Homebrew (planned)
-
-A Homebrew tap (`figarocorso/tap`) is on the roadmap but not published yet.
-Use `go install` or the pre-built binaries for now.
 
 ## Requirements
 
