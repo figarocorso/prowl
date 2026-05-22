@@ -16,8 +16,15 @@
 # @raycast.description Add a PR URL to prowl tracking list
 # @raycast.author figarocorso
 
-# Override with: export PROWL_BIN=/path/to/prowl.sh
-PROWL_CMD="${PROWL_BIN:-prowl.sh}"
+# Resolve which prowl to launch. Override with PROWL_BIN=/abs/path.
+# Default: prefer the Go binary `prowl`; fall back to the legacy `prowl.sh`.
+if [[ -n "${PROWL_BIN:-}" ]]; then
+  PROWL_CMD="$PROWL_BIN"
+elif command -v prowl >/dev/null 2>&1; then
+  PROWL_CMD="prowl"
+else
+  PROWL_CMD="prowl.sh"
+fi
 PR_URL="$1"
 
 PR_URL=$(echo "$PR_URL" | tr -d '[:space:]')
