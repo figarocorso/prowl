@@ -14,3 +14,14 @@ Thumbs.db
 prs-unmerged.txt
 prs-merged.txt
 prs-closed.txt
+
+# Local planning notes (not for sharing)
+TODO.md
+IDEAS.md
+
+# Go build artifacts
+/prowl
+/dist/
+coverage.out
+*.test
+*.prof

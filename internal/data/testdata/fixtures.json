@@ -1,0 +1,53 @@
+{
+  "https://github.com/acme/api/pull/1234": {
+    "url": "https://github.com/acme/api/pull/1234",
+    "owner": "acme",
+    "repo": "api",
+    "number": 1234,
+    "title": "Add /healthz endpoint",
+    "state": "OPEN",
+    "merge_state_status": "CLEAN",
+    "is_draft": false,
+    "assignees": ["alice"],
+    "queue": { "state": "MERGEABLE", "position": 2, "eta": 420000000000 }
+  },
+  "https://github.com/acme/api/pull/1235": {
+    "url": "https://github.com/acme/api/pull/1235",
+    "owner": "acme",
+    "repo": "api",
+    "number": 1235,
+    "title": "Refactor auth middleware",
+    "state": "OPEN",
+    "merge_state_status": "BLOCKED",
+    "is_draft": false,
+    "assignees": ["bob", "carol"]
+  },
+  "https://github.com/acme/api/pull/1198": {
+    "url": "https://github.com/acme/api/pull/1198",
+    "owner": "acme",
+    "repo": "api",
+    "number": 1198,
+    "title": "Bump deps",
+    "state": "MERGED",
+    "is_draft": false,
+    "assignees": ["dave"]
+  },
+  "https://github.com/acme/api/pull/1199": {
+    "url": "https://github.com/acme/api/pull/1199",
+    "owner": "acme",
+    "repo": "api",
+    "number": 1199,
+    "title": "WIP",
+    "state": "OPEN",
+    "is_draft": true,
+    "assignees": []
+  },
+  "https://github.com/acme/api/pull/1200": {
+    "url": "https://github.com/acme/api/pull/1200",
+    "owner": "acme",
+    "repo": "api",
+    "number": 1200,
+    "title": "Rejected idea",
+    "state": "CLOSED"
+  }
+}
