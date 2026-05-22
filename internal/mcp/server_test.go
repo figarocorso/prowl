@@ -167,6 +167,108 @@ func TestMutationsAllowed(t *testing.T) {
 	assert.Equal(t, []string{"https://github.com/acme/api/pull/9999"}, active)
 }
 
+func TestGetPRTool(t *testing.T) {
+	srv, _, _, out, in := newTestServer(t, false)
+	resps := sendAndCollect(t, srv, out, in, []string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_pr","arguments":{"url":"https://github.com/acme/api/pull/1234"}}}`,
+	})
+	require.Len(t, resps, 1)
+	text := resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	var pr map[string]any
+	require.NoError(t, json.Unmarshal([]byte(text), &pr))
+	assert.Equal(t, float64(1234), pr["number"])
+}
+
+func TestGetPRToolMissingURL(t *testing.T) {
+	srv, _, _, out, in := newTestServer(t, false)
+	resps := sendAndCollect(t, srv, out, in, []string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_pr","arguments":{}}}`,
+	})
+	require.Len(t, resps, 1)
+	require.NotNil(t, resps[0]["error"])
+}
+
+func TestRemovePRTool(t *testing.T) {
+	srv, _, s, out, in := newTestServer(t, true)
+	_, err := s.Add("https://github.com/acme/api/pull/1234")
+	require.NoError(t, err)
+
+	resps := sendAndCollect(t, srv, out, in, []string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"remove_pr","arguments":{"url":"https://github.com/acme/api/pull/1234"}}}`,
+	})
+	require.Len(t, resps, 1)
+	require.Nil(t, resps[0]["error"])
+
+	active, err := s.Active()
+	require.NoError(t, err)
+	assert.Empty(t, active)
+}
+
+func TestListPRsAssigneeFilter(t *testing.T) {
+	srv, _, s, out, in := newTestServer(t, false)
+	for _, u := range []string{
+		"https://github.com/acme/api/pull/1234",
+		"https://github.com/acme/api/pull/1235",
+	} {
+		_, err := s.Add(u)
+		require.NoError(t, err)
+	}
+
+	resps := sendAndCollect(t, srv, out, in, []string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_prs","arguments":{"assignee":"alice"}}}`,
+	})
+	require.Len(t, resps, 1)
+	text := resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(text), &rows))
+	// fixtures.json: 1234 is assigned to alice, 1235 to bob+carol
+	require.Len(t, rows, 1)
+	assert.Equal(t, float64(1234), rows[0]["number"])
+}
+
+func TestListPRsAllSource(t *testing.T) {
+	srv, _, s, out, in := newTestServer(t, false)
+	_, err := s.Add("https://github.com/acme/api/pull/1234")
+	require.NoError(t, err)
+	_, err = s.MoveActiveToReviewed([]string{"https://github.com/acme/api/pull/1234"})
+	require.NoError(t, err)
+	_, err = s.Add("https://github.com/acme/api/pull/1235")
+	require.NoError(t, err)
+
+	resps := sendAndCollect(t, srv, out, in, []string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_prs","arguments":{"source":"all"}}}`,
+	})
+	require.Len(t, resps, 1)
+	text := resps[0]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	var rows []map[string]any
+	require.NoError(t, json.Unmarshal([]byte(text), &rows))
+	assert.Len(t, rows, 2)
+}
+
+func TestListPRsInvalidSource(t *testing.T) {
+	srv, _, _, out, in := newTestServer(t, false)
+	resps := sendAndCollect(t, srv, out, in, []string{
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_prs","arguments":{"source":"bogus"}}}`,
+	})
+	require.Len(t, resps, 1)
+	require.NotNil(t, resps[0]["error"])
+}
+
+func TestContainsFold(t *testing.T) {
+	assert.True(t, containsFold([]string{"Alice", "Bob"}, "alice"))
+	assert.True(t, containsFold([]string{"Alice", "Bob"}, "BOB"))
+	assert.False(t, containsFold([]string{"Alice", "Bob"}, "carol"))
+	assert.False(t, containsFold(nil, "alice"))
+}
+
+func TestTextResult(t *testing.T) {
+	r := textResult("hello")
+	require.Len(t, r.Content, 1)
+	assert.Equal(t, "text", r.Content[0].Type)
+	assert.Equal(t, "hello", r.Content[0].Text)
+	assert.False(t, r.IsError)
+}
+
 func TestUnknownMethod(t *testing.T) {
 	srv, _, _, out, in := newTestServer(t, false)
 	resps := sendAndCollect(t, srv, out, in, []string{

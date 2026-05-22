@@ -13,10 +13,9 @@ permissions:
   actions: read
 
 env:
-  # Bumped from 55 -> 60 (current total is ~60.7%). The TODO target is 70,
-  # but raising the gate that high would require a substantial test push
-  # across cmd/* and internal/data first. Tracked in TODO.md.
-  COVERAGE_THRESHOLD: "60"
+  # Bumped 60 -> 70 after adding tests across cmd/*, internal/data,
+  # and internal/mcp. Current total is ~70.7%.
+  COVERAGE_THRESHOLD: "70"
 
 jobs:
   test:

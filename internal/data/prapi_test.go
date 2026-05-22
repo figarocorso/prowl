@@ -107,6 +107,13 @@ func TestQueueLabel(t *testing.T) {
 	assert.Equal(t, "queued (something else)", QueueLabel(PR{Queue: &MergeQueueEntry{State: "SOMETHING_ELSE"}}))
 }
 
+func TestQueuePositionLabel(t *testing.T) {
+	assert.Equal(t, "-", QueuePositionLabel(PR{}))
+	assert.Equal(t, "-", QueuePositionLabel(PR{Queue: &MergeQueueEntry{Position: 0}}))
+	assert.Equal(t, "-", QueuePositionLabel(PR{Queue: &MergeQueueEntry{Position: -1}}))
+	assert.Equal(t, "3", QueuePositionLabel(PR{Queue: &MergeQueueEntry{Position: 3}}))
+}
+
 func TestETALabel(t *testing.T) {
 	assert.Equal(t, "-", ETALabel(PR{}))
 	assert.Equal(t, "~30s", ETALabel(PR{Queue: &MergeQueueEntry{ETA: 30 * time.Second}}))
