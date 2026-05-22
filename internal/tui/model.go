@@ -38,6 +38,8 @@ type Model struct {
 	height         int
 	confirmArchive bool
 	pendingArchive []string
+	confirmDelete  bool
+	pendingDelete  string
 }
 
 // New builds an unstarted Model.
@@ -112,6 +114,27 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.confirmDelete {
+			switch msg.String() {
+			case "y", "Y":
+				url := m.pendingDelete
+				m.confirmDelete = false
+				m.pendingDelete = ""
+				if _, err := m.store.Remove(url); err != nil {
+					m.err = err.Error()
+					return m, nil
+				}
+				m.status = "Removed " + url
+				m.loading = true
+				return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
+			case "n", "N", "esc":
+				m.confirmDelete = false
+				m.pendingDelete = ""
+				m.status = "Delete cancelled"
+				return m, nil
+			}
+			return m, nil
+		}
 		switch msg.String() {
 		case "q", "ctrl+c", "esc":
 			terminal := m.terminalURLs()
@@ -141,13 +164,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "d", "backspace", "delete":
 			if url := m.selectedURL(); url != "" {
-				if _, err := m.store.Remove(url); err != nil {
-					m.err = err.Error()
-				} else {
-					m.status = "Removed " + url
-					m.loading = true
-					return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
-				}
+				m.confirmDelete = true
+				m.pendingDelete = url
+				return m, nil
 			}
 		}
 	case rowsReadyMsg:
@@ -199,10 +218,14 @@ func (m *Model) View() string {
 		b.WriteString("\n")
 	}
 
-	if m.confirmArchive {
+	switch {
+	case m.confirmArchive:
 		prompt := fmt.Sprintf("\n📦 Archive %d closed/merged PR(s)? [y/N]", len(m.pendingArchive))
 		b.WriteString(headerStyle.Render(prompt))
-	} else {
+	case m.confirmDelete:
+		prompt := fmt.Sprintf("\n🗑  Delete %s? [y/N]", m.pendingDelete)
+		b.WriteString(headerStyle.Render(prompt))
+	default:
 		b.WriteString(hintStyle.Render("\n↑↓ nav · ⏎ open · c copy · d delete · r refresh · q quit"))
 	}
 	return b.String()
