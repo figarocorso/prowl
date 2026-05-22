@@ -24,14 +24,14 @@ const (
 
 // Server holds the wiring for a single MCP session.
 type Server struct {
-	cfg              *config.Config
-	store            *store.Store
-	client           data.PRClient
-	in               io.Reader
-	out              io.Writer
-	allowMutations   bool
-	diffFetcher      func(context.Context, string) (string, error)
-	serverVersion    string
+	cfg            *config.Config
+	store          *store.Store
+	client         data.PRClient
+	in             io.Reader
+	out            io.Writer
+	allowMutations bool
+	diffFetcher    func(context.Context, string) (string, error)
+	serverVersion  string
 }
 
 // Options is the dependency bag for NewServer.

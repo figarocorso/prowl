@@ -123,9 +123,9 @@ type prGQLResponse struct {
 				} `json:"nodes"`
 			} `json:"assignees"`
 			MergeQueueEntry *struct {
-				State                  string `json:"state"`
-				Position               int    `json:"position"`
-				EstimatedTimeToMerge   *int   `json:"estimatedTimeToMerge"`
+				State                string `json:"state"`
+				Position             int    `json:"position"`
+				EstimatedTimeToMerge *int   `json:"estimatedTimeToMerge"`
 			} `json:"mergeQueueEntry"`
 		} `json:"pullRequest"`
 	} `json:"repository"`

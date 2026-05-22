@@ -81,7 +81,7 @@ func appendFile(dst, src string) error {
 	if err != nil {
 		return fmt.Errorf("open %s: %w", dst, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
@@ -114,7 +114,7 @@ func ReadURLs(path string) ([]string, error) {
 		}
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var urls []string
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -164,7 +164,7 @@ func (s *Store) Add(url string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("open active: %w", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if _, err := fmt.Fprintln(f, url); err != nil {
 		return false, fmt.Errorf("write active: %w", err)
 	}
@@ -212,7 +212,7 @@ func moveBetweenFiles(src, dst string, target map[string]struct{}) (int, error) 
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", dst, err)
 	}
-	defer dstFile.Close()
+	defer func() { _ = dstFile.Close() }()
 
 	var kept []string
 	moved := 0
@@ -269,7 +269,7 @@ func readLines(path string) ([]string, error) {
 		}
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	var out []string
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
@@ -290,18 +290,18 @@ func writeLines(path string, lines []string) error {
 	w := bufio.NewWriter(tmp)
 	for _, line := range lines {
 		if _, err := fmt.Fprintln(w, line); err != nil {
-			tmp.Close()
-			os.Remove(tmp.Name())
+			_ = tmp.Close()
+			_ = os.Remove(tmp.Name())
 			return fmt.Errorf("write tmp: %w", err)
 		}
 	}
 	if err := w.Flush(); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return fmt.Errorf("flush tmp: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return fmt.Errorf("close tmp: %w", err)
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
