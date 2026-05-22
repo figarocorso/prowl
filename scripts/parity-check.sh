@@ -10,7 +10,7 @@
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BASH_BIN="${PROWL_BASH:-$REPO/prowl.sh}"
+BASH_BIN="${PROWL_BASH:-$REPO/legacy/prowl.sh}"
 GO_BIN="${PROWL_GO:-$REPO/prowl}"
 
 if [[ ! -x "$BASH_BIN" ]]; then

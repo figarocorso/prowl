@@ -189,10 +189,9 @@ To enable mutations, swap the args for `["mcp", "--allow-mutations"]`.
 
 ## Legacy bash script
 
-The original `prowl.sh` (Bash + `gh` + `jq`) still ships in this repo for users
-not ready to switch. It reads the same data directory as the Go binary, so the
-two can coexist during a transition. The bash script will move to `legacy/`
-once the Go binary has shipped a stable release.
+The original `prowl.sh` (Bash + `gh` + `jq`) lives in [`legacy/`](./legacy/)
+for users not ready to switch. It reads the same data directory as the Go
+binary, so the two can coexist.
 
 ## License
 
