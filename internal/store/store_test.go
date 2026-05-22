@@ -42,7 +42,7 @@ func TestAddDeduplicates(t *testing.T) {
 
 func TestAddDeduplicatesAgainstReviewed(t *testing.T) {
 	s := newStore(t)
-	require.NoError(t, os.WriteFile(s.ReviewedPath, []byte("https://github.com/acme/api/pull/9\n"), 0o644))
+	require.NoError(t, os.WriteFile(s.ReviewedPath, []byte("https://github.com/acme/api/pull/9\n"), 0o600))
 	added, err := s.Add("https://github.com/acme/api/pull/9")
 	require.NoError(t, err)
 	assert.False(t, added)
@@ -77,8 +77,8 @@ func TestMoveActiveToReviewedPreservesOthers(t *testing.T) {
 
 func TestRemoveDeletesFromBothLists(t *testing.T) {
 	s := newStore(t)
-	require.NoError(t, os.WriteFile(s.ActivePath, []byte("https://github.com/acme/api/pull/1\n"), 0o644))
-	require.NoError(t, os.WriteFile(s.ReviewedPath, []byte("https://github.com/acme/api/pull/1\n"), 0o644))
+	require.NoError(t, os.WriteFile(s.ActivePath, []byte("https://github.com/acme/api/pull/1\n"), 0o600))
+	require.NoError(t, os.WriteFile(s.ReviewedPath, []byte("https://github.com/acme/api/pull/1\n"), 0o600))
 
 	removed, err := s.Remove("https://github.com/acme/api/pull/1")
 	require.NoError(t, err)
@@ -100,7 +100,7 @@ func TestReadURLsIgnoresCommentsAndBlanks(t *testing.T) {
 		"https://github.com/acme/api/pull/1\n" +
 		"  # indented\n" +
 		"\thttps://github.com/acme/api/pull/2\n"
-	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
 
 	urls, err := ReadURLs(path)
 	require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestReadURLsIgnoresCommentsAndBlanks(t *testing.T) {
 func TestReadURLsStripsLegacyPrefix(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "list.txt")
-	require.NoError(t, os.WriteFile(path, []byte("MERGED|https://github.com/acme/api/pull/1\n"), 0o644))
+	require.NoError(t, os.WriteFile(path, []byte("MERGED|https://github.com/acme/api/pull/1\n"), 0o600))
 
 	urls, err := ReadURLs(path)
 	require.NoError(t, err)
@@ -124,9 +124,9 @@ func TestMigrateLegacyFiles(t *testing.T) {
 	dir := t.TempDir()
 	active := filepath.Join(dir, "prs-active.txt")
 	reviewed := filepath.Join(dir, "prs-reviewed.txt")
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prs-unmerged.txt"), []byte("https://github.com/acme/api/pull/10\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prs-merged.txt"), []byte("https://github.com/acme/api/pull/20\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "prs-closed.txt"), []byte("https://github.com/acme/api/pull/30\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prs-unmerged.txt"), []byte("https://github.com/acme/api/pull/10\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prs-merged.txt"), []byte("https://github.com/acme/api/pull/20\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "prs-closed.txt"), []byte("https://github.com/acme/api/pull/30\n"), 0o600))
 
 	_, err := New(active, reviewed)
 	require.NoError(t, err)

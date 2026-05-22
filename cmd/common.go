@@ -14,7 +14,7 @@ var clientFactory = func() (data.PRClient, error) {
 }
 
 func loadConfigAndStore() (*config.Config, *store.Store, error) {
-	cfg, err := config.Load(dataDir)
+	cfg, err := config.Load(dataDir, profile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load config: %w", err)
 	}

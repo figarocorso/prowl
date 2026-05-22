@@ -58,7 +58,7 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 		printOptional(out, plain, "clipboard", "no pbcopy/wl-copy/xclip/xsel; copy disabled")
 	}
 
-	cfg, err := config.Load(dataDir)
+	cfg, err := config.Load(dataDir, profile)
 	if err != nil {
 		printMissing(out, plain, "data dir", err.Error())
 		missing++
@@ -113,7 +113,7 @@ func clipboardTool() string {
 }
 
 func checkWritable(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
 	tmp, err := os.CreateTemp(dir, ".prowl-write-")

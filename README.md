@@ -1,5 +1,10 @@
 # 🦉 prowl
 
+[![CI](https://github.com/figarocorso/prowl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/figarocorso/prowl/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/figarocorso/prowl?sort=semver)](https://github.com/figarocorso/prowl/releases/latest)
+[![Go version](https://img.shields.io/github/go-mod/go-version/figarocorso/prowl)](./go.mod)
+[![License](https://img.shields.io/github/license/figarocorso/prowl)](./LICENSE)
+
 > **Keep watch over your pull requests.**
 
 A single-binary CLI + TUI for keeping tabs on the GitHub Pull Requests you care
@@ -105,6 +110,7 @@ Optional:
 
 ```sh
 prowl                                       # interactive TUI
+prowl watch [--interval 30s]                # TUI + periodic auto-refresh
 prowl list                                  # plain table on stdout
 prowl list --json                           # JSON array (agent-friendly)
 prowl list --open                           # only currently-open PRs
@@ -116,6 +122,19 @@ prowl get <url> [--json]                    # single-PR detail
 prowl check                                 # environment / auth / data dir
 prowl version
 ```
+
+### Watch mode
+
+`prowl watch` opens the same TUI as `prowl` but re-fetches the active PR list
+on a timer, so a long-running window stays current without you pressing `r`.
+
+```sh
+prowl watch                 # default: refresh every 30s
+prowl watch --interval 1m   # custom cadence (minimum 5s to spare GitHub)
+```
+
+Press `q` or `Ctrl-C` to exit. The default 30s balances staying fresh against
+the GitHub API rate limit; intervals below 5s are rejected.
 
 Output styling: human terminals get colored, emoji-prefixed output. Pipes,
 `NO_COLOR=1`, and `--plain` (alias `--no-color`) force ASCII-only output that
@@ -145,6 +164,18 @@ Priority (highest to lowest):
 
 Individual file paths can also be overridden via `PROWL_ACTIVE` and
 `PROWL_REVIEWED`.
+
+### Profiles
+
+Use `--profile <name>` (or `PROWL_PROFILE=<name>`) to keep PRs from different
+contexts in separate subdirectories of the data dir (e.g. `work` vs
+`personal`). When unset, prowl uses the base data dir unchanged so existing
+setups keep working.
+
+```sh
+prowl --profile work add https://github.com/acme/api/pull/1234
+PROWL_PROFILE=personal prowl list
+```
 
 ### Optional config file
 
@@ -228,34 +259,5 @@ Apache License 2.0 — see [`LICENSE`](./LICENSE).
 
 ## Contributing
 
-Issues and pull requests welcome. Keep changes focused, small, and
-self-contained.
-
-### Development
-
-Common workflows via [Task](https://taskfile.dev):
-
-```sh
-task test            # go test ./...
-task coverage        # write coverage.out + print total
-task coverage-html   # render coverage.html
-task coverage-check  # fail if total < threshold (default 55%)
-task lint            # golangci-lint
-task ci              # tidy + lint + test + coverage-check
-```
-
-Override the threshold with `COVERAGE_THRESHOLD=70 task coverage-check`.
-
-### Git hooks
-
-This repo uses [Lefthook](https://lefthook.dev) (`lefthook.yml`):
-
-- **pre-commit** — `gofmt`, `go vet`, `golangci-lint`
-- **pre-push** — `go test -race` + coverage threshold check
-
-Install once:
-
-```sh
-brew install lefthook   # or: go install github.com/evilmartians/lefthook@latest
-task install-hooks      # runs `lefthook install`
-```
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for development setup,
+coverage policy, git hooks, and the release process.
