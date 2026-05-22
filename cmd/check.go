@@ -114,7 +114,7 @@ func checkWritable(dir string) error {
 	if err != nil {
 		return fmt.Errorf("not writable: %w", err)
 	}
-	tmp.Close()
+	_ = tmp.Close()
 	return os.Remove(tmp.Name())
 }
 
