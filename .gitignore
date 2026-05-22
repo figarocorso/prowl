@@ -8,6 +8,7 @@ Thumbs.db
 *~
 .idea/
 .vscode/
+.claude/
 
 # Local PR list files (in case the script is run from this directory
 # with PR_REVIEW_DATA_DIR=. or similar dev configuration)
