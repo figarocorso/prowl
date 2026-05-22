@@ -10,6 +10,7 @@ import (
 
 var (
 	dataDir string
+	profile string
 	jsonOut bool
 )
 
@@ -35,6 +36,7 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&dataDir, "data-dir", "", "directory holding list files (default: $XDG_DATA_HOME/prowl)")
+	rootCmd.PersistentFlags().StringVar(&profile, "profile", "", "profile subdir of the data dir, e.g. work or personal (also honors PROWL_PROFILE)")
 	rootCmd.PersistentFlags().BoolVar(&ui.Plain, "plain", false, "disable colors/emoji; emit ASCII-only output (also honors NO_COLOR)")
 	rootCmd.PersistentFlags().BoolVar(&ui.Plain, "no-color", false, "alias for --plain")
 }
