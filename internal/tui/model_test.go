@@ -180,6 +180,64 @@ func TestQuitArchivePromptDeclined(t *testing.T) {
 	require.Empty(t, reviewed)
 }
 
+func TestDeletePromptsConfirmation(t *testing.T) {
+	url := "https://github.com/acme/api/pull/1234"
+	m := newTestModel(t, []string{url})
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "#1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "Delete "+url+"?")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "no active PRs")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+
+	active, err := m.store.Active()
+	require.NoError(t, err)
+	require.Empty(t, active)
+}
+
+func TestDeletePromptCancelKeepsRow(t *testing.T) {
+	url := "https://github.com/acme/api/pull/1234"
+	m := newTestModel(t, []string{url})
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "#1234")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "Delete "+url+"?")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "Delete cancelled")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+
+	active, err := m.store.Active()
+	require.NoError(t, err)
+	require.Equal(t, []string{url}, active)
+}
+
 func TestModelSummary(t *testing.T) {
 	mock := data.NewMockClient()
 	require.NoError(t, mock.LoadFixtures(filepath.Join("..", "..", "internal", "data", "testdata", "fixtures.json")))
