@@ -31,11 +31,15 @@ in your browser.
 
 ## Install
 
-### Homebrew (macOS / Linux)
+All install paths leave you with a `prowl` binary that must live on your
+`PATH`. Verify with:
 
 ```sh
-brew install figarocorso/tap/prowl
+prowl check
 ```
+
+If the command is not found after installing, the directory holding the
+binary is not on your shell `PATH` — see the notes under each method.
 
 ### `go install`
 
@@ -43,11 +47,27 @@ brew install figarocorso/tap/prowl
 go install github.com/figarocorso/prowl@latest
 ```
 
+This drops the binary in `$(go env GOBIN)` (if set) or `$(go env GOPATH)/bin`
+(typically `~/go/bin`). Add it to your shell `PATH` once:
+
+```sh
+# zsh
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+
+# bash
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
 ### Pre-built binaries
 
 Grab the archive for your platform from
-[the releases page](https://github.com/figarocorso/prowl/releases) and drop the
-extracted `prowl` binary anywhere on your `PATH`.
+[the releases page](https://github.com/figarocorso/prowl/releases), extract
+it, and move the `prowl` binary somewhere already on your `PATH`:
+
+```sh
+tar -xzf prowl_<version>_<os>_<arch>.tar.gz
+sudo mv prowl /usr/local/bin/prowl
+```
 
 ### From source
 
@@ -55,13 +75,13 @@ extracted `prowl` binary anywhere on your `PATH`.
 git clone https://github.com/figarocorso/prowl.git
 cd prowl
 go build -o prowl .
+sudo mv prowl /usr/local/bin/prowl     # or copy under any $PATH dir you own
 ```
 
-Then verify:
+### Homebrew (planned)
 
-```sh
-prowl check
-```
+A Homebrew tap (`figarocorso/tap`) is on the roadmap but not published yet.
+Use `go install` or the pre-built binaries for now.
 
 ## Requirements
 
