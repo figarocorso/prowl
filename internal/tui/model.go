@@ -451,51 +451,19 @@ func (m *Model) handleAutoRefresh() tea.Cmd {
 func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
 	switch key {
 	case "/", ":":
-		m.palette = true
-		m.paletteInput = ""
-		m.overlay = ""
-		m.err = ""
-		m.status = "Command palette — type add <url>, usage, archive · esc cancels"
-		return m, nil, true
+		return m.openPalette(), nil, true
 	case "esc":
-		if m.overlay != "" {
-			m.overlay = ""
-			m.status = "Overlay closed"
-			return m, nil, true
-		}
-		terminal := m.terminalURLs()
-		if len(terminal) == 0 {
-			return m, tea.Quit, true
-		}
-		m.confirmArchive = true
-		m.pendingArchive = terminal
-		return m, nil, true
+		return m.handleEsc()
 	case "q", "ctrl+c":
-		terminal := m.terminalURLs()
-		if len(terminal) == 0 {
-			return m, tea.Quit, true
-		}
-		m.confirmArchive = true
-		m.pendingArchive = terminal
-		return m, nil, true
+		return m.quitOrPromptArchive()
 	case "r", "ctrl+r":
-		if !m.loading {
-			m.loading = true
-			m.status = "Refreshing…"
-			return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client)), true
-		}
+		return m.refresh()
 	case "enter":
 		if url := m.selectedURL(); url != "" {
 			_ = openInBrowser(url)
 		}
 	case "c":
-		if url := m.selectedURL(); url != "" {
-			if err := copyToClipboard(url); err != nil {
-				m.err = err.Error()
-			} else {
-				m.status = "Copied " + url
-			}
-		}
+		m.copySelectedURL()
 	case "d", "backspace", "delete":
 		if url := m.selectedURL(); url != "" {
 			m.confirmDelete = true
@@ -504,6 +472,61 @@ func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
 		}
 	}
 	return m, nil, false
+}
+
+func (m *Model) openPalette() *Model {
+	m.palette = true
+	m.paletteInput = ""
+	m.overlay = ""
+	m.err = ""
+	m.status = "Command palette — type add <url>, usage, archive · esc cancels"
+	return m
+}
+
+func (m *Model) handleEsc() (tea.Model, tea.Cmd, bool) {
+	if m.overlay != "" {
+		m.overlay = ""
+		m.status = "Overlay closed"
+		return m, nil, true
+	}
+	model, cmd := m.quitOrPromptArchiveCore()
+	return model, cmd, true
+}
+
+func (m *Model) quitOrPromptArchive() (tea.Model, tea.Cmd, bool) {
+	model, cmd := m.quitOrPromptArchiveCore()
+	return model, cmd, true
+}
+
+func (m *Model) quitOrPromptArchiveCore() (tea.Model, tea.Cmd) {
+	terminal := m.terminalURLs()
+	if len(terminal) == 0 {
+		return m, tea.Quit
+	}
+	m.confirmArchive = true
+	m.pendingArchive = terminal
+	return m, nil
+}
+
+func (m *Model) refresh() (tea.Model, tea.Cmd, bool) {
+	if m.loading {
+		return m, nil, false
+	}
+	m.loading = true
+	m.status = "Refreshing…"
+	return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client)), true
+}
+
+func (m *Model) copySelectedURL() {
+	url := m.selectedURL()
+	if url == "" {
+		return
+	}
+	if err := copyToClipboard(url); err != nil {
+		m.err = err.Error()
+		return
+	}
+	m.status = "Copied " + url
 }
 
 func (m *Model) handleRowsReady(msg rowsReadyMsg) {

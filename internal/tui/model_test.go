@@ -242,13 +242,17 @@ func TestDeleteRemovesRowImmediately(t *testing.T) {
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
 
+	// Wait for the refetch summary to land — exactly one open PR (1235) remains.
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		s := string(b)
-		return !strings.Contains(s, "pull/1234") && strings.Contains(s, "pull/1235")
+		return strings.Contains(string(b), "1 open")
 	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
 
 	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+
+	active, err := m.store.Active()
+	require.NoError(t, err)
+	require.Equal(t, []string{kept}, active)
 }
 
 func TestDeletePromptCancelKeepsRow(t *testing.T) {
