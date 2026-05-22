@@ -225,6 +225,32 @@ func TestDeletePromptsConfirmation(t *testing.T) {
 	require.Empty(t, active)
 }
 
+func TestDeleteRemovesRowImmediately(t *testing.T) {
+	deleted := "https://github.com/acme/api/pull/1234"
+	kept := "https://github.com/acme/api/pull/1235"
+	m := newTestModel(t, []string{deleted, kept})
+	tm := teatest.NewTestModel(t, m, teatest.WithInitialTermSize(200, 30))
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "#1234") && strings.Contains(string(b), "#1235")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return strings.Contains(string(b), "Delete "+deleted+"?")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		s := string(b)
+		return !strings.Contains(s, "#1234") && strings.Contains(s, "#1235")
+	}, teatest.WithCheckInterval(20*time.Millisecond), teatest.WithDuration(2*time.Second))
+
+	tm.Send(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	tm.WaitFinished(t, teatest.WithFinalTimeout(2*time.Second))
+}
+
 func TestDeletePromptCancelKeepsRow(t *testing.T) {
 	url := "https://github.com/acme/api/pull/1234"
 	m := newTestModel(t, []string{url})
