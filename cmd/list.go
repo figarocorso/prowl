@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -12,6 +13,7 @@ import (
 	"github.com/figarocorso/prowl/internal/store"
 	"github.com/figarocorso/prowl/internal/ui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var (
@@ -101,15 +103,38 @@ func filterOpen(in []data.Result) []data.Result {
 
 type tableCell struct{ raw, rendered string }
 
+// titleFallbackWidth is used to cap titles when the output isn't a TTY (e.g.
+// piped output) so dumps stay readable without knowing the terminal width.
+const titleFallbackWidth = 80
+
+// minTitleWidth keeps the Title column readable when the terminal is narrow.
+const minTitleWidth = 20
+
 func renderTable(out io.Writer, results []data.Result) error {
 	plain := ui.IsPlain(out)
-	headers := []string{"PR", "Assignee", "Status", "Queue", "Pos", "ETA", "URL"}
+	headers := []string{"URL", "Assignee", "Status", "Queue", "Pos", "ETA", "Title"}
 	rows := buildTableRows(plain, headers, results)
-	widths := columnWidths(rows)
+	widths := smartColumnWidths(rows, headers, terminalWidth(out))
 	for _, row := range rows {
 		printTableRow(out, row, widths)
 	}
 	return nil
+}
+
+// terminalWidth returns the column count of w when w is a TTY, 0 otherwise.
+func terminalWidth(w io.Writer) int {
+	f, ok := w.(*os.File)
+	if !ok {
+		return 0
+	}
+	if !term.IsTerminal(int(f.Fd())) {
+		return 0
+	}
+	cols, _, err := term.GetSize(int(f.Fd()))
+	if err != nil {
+		return 0
+	}
+	return cols
 }
 
 func buildTableRows(plain bool, headers []string, results []data.Result) [][]tableCell {
@@ -136,60 +161,144 @@ func resultToRow(plain bool, r data.Result) []tableCell {
 
 func rawRowValues(r data.Result) [7]string {
 	if r.Err != nil {
-		return [7]string{"?", "-", "error", "-", "-", "-", r.URL}
+		return [7]string{data.ShortURL(r.URL), "-", "error", "-", "-", "-", "-"}
 	}
 	pr := r.PR
-	num := "?"
-	if pr.Number > 0 {
-		num = fmt.Sprintf("#%d", pr.Number)
-	}
 	return [7]string{
-		num,
+		data.ShortURL(pr.URL),
 		data.AssigneesLabel(pr),
 		data.StatusLabel(pr),
-		data.QueueLabel(pr),
+		data.QueueLabelShort(pr),
 		data.QueuePositionLabel(pr),
 		data.ETALabel(pr),
-		pr.URL,
+		pr.Title,
 	}
 }
 
 func renderCellValue(plain bool, col int, v string) string {
 	switch col {
+	case 0:
+		return ui.Dim(plain, v)
 	case 2:
 		return ui.StatusBadge(plain, v)
 	case 6:
-		return ui.Dim(plain, v)
+		return v
 	default:
 		return v
 	}
 }
 
-func columnWidths(rows [][]tableCell) []int {
+// truncate shortens s to n runes max, appending an ellipsis when truncated.
+func truncate(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	if n == 1 {
+		return "…"
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// smartColumnWidths sizes each column to fit the widest cell content (or just
+// the header when the column has no real value), then either lets the last
+// (Title) column flow to the end of termWidth or — when termWidth is 0 (e.g.
+// the output is piped) — caps it at titleFallbackWidth.
+func smartColumnWidths(rows [][]tableCell, headers []string, termWidth int) []int {
 	if len(rows) == 0 {
 		return nil
 	}
-	widths := make([]int, len(rows[0]))
-	for _, row := range rows {
+	cols := len(rows[0])
+	titleIdx := cols - 1
+	widths, hasContent := initColWidths(headers, rows[1:])
+	collapseEmptyCols(widths, hasContent, headers)
+	widths[titleIdx] = sizeTitleColumn(widths, rows[1:], headers, termWidth, titleIdx)
+	return widths
+}
+
+// initColWidths seeds widths from headers and grows each to fit the widest
+// cell in the data rows. Returns the widths and a per-column "has real value"
+// flag (so callers can collapse empty placeholder columns to header width).
+func initColWidths(headers []string, dataRows [][]tableCell) ([]int, []bool) {
+	cols := len(headers)
+	widths := make([]int, cols)
+	hasContent := make([]bool, cols)
+	for i, h := range headers {
+		widths[i] = lipgloss.Width(h)
+	}
+	for _, row := range dataRows {
 		for i, c := range row {
 			if w := lipgloss.Width(c.raw); w > widths[i] {
 				widths[i] = w
 			}
+			if c.raw != "" && c.raw != "-" {
+				hasContent[i] = true
+			}
 		}
 	}
-	return widths
+	return widths, hasContent
+}
+
+// collapseEmptyCols resets a column to its header width when none of its
+// data rows contained a meaningful value.
+func collapseEmptyCols(widths []int, hasContent []bool, headers []string) {
+	for i, h := range headers {
+		if !hasContent[i] {
+			widths[i] = lipgloss.Width(h)
+		}
+	}
+}
+
+// sizeTitleColumn picks a width for the Title column: when termWidth > 0 the
+// Title gets the leftover terminal width (capped by the longest title and
+// clamped to minTitleWidth); otherwise it falls back to titleFallbackWidth.
+func sizeTitleColumn(widths []int, dataRows [][]tableCell, headers []string, termWidth, titleIdx int) int {
+	maxTitle := 0
+	for _, row := range dataRows {
+		if w := lipgloss.Width(row[titleIdx].raw); w > maxTitle {
+			maxTitle = w
+		}
+	}
+	var w int
+	if termWidth > 0 {
+		used := 0
+		for i, cw := range widths {
+			if i == titleIdx {
+				continue
+			}
+			used += cw + 2 // gap between columns
+		}
+		remaining := max(termWidth-used, minTitleWidth)
+		w = min(remaining, maxTitle)
+	} else {
+		w = min(maxTitle, titleFallbackWidth)
+	}
+	return max(w, lipgloss.Width(headers[titleIdx]))
 }
 
 func printTableRow(out io.Writer, row []tableCell, widths []int) {
 	for i, c := range row {
 		if i == len(row)-1 {
-			fmt.Fprint(out, c.rendered)
+			fmt.Fprint(out, truncateCell(c.rendered, c.raw, widths[i]))
 			continue
 		}
 		pad := max(widths[i]-lipgloss.Width(c.raw)+2, 1)
 		fmt.Fprint(out, c.rendered, strings.Repeat(" ", pad))
 	}
 	fmt.Fprintln(out)
+}
+
+// truncateCell shortens rendered to width runes when raw exceeds it. ANSI
+// styling on rendered would break under naive slicing, so we re-render from
+// the truncated raw form.
+func truncateCell(rendered, raw string, width int) string {
+	if lipgloss.Width(raw) <= width {
+		return rendered
+	}
+	return truncate(raw, width)
 }
 
 type jsonRow struct {

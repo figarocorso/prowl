@@ -131,3 +131,43 @@ func TestIsTerminal(t *testing.T) {
 	assert.True(t, IsTerminal(PR{State: "CLOSED"}))
 	assert.False(t, IsTerminal(PR{State: "OPEN"}))
 }
+
+func TestQueueLabelShort(t *testing.T) {
+	assert.Equal(t, "-", QueueLabelShort(PR{}))
+	assert.Equal(t, "ready", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "MERGEABLE"}}))
+	assert.Equal(t, "checks", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "AWAITING_CHECKS"}}))
+	assert.Equal(t, "locked", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "LOCKED"}}))
+	assert.Equal(t, "blocked", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "UNMERGEABLE"}}))
+	assert.Equal(t, "queued", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "QUEUED"}}))
+	assert.Equal(t, "weird", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "WEIRD"}}))
+}
+
+func TestShortURL(t *testing.T) {
+	assert.Equal(t, "acme/api/pull/42", ShortURL("https://github.com/acme/api/pull/42"))
+	assert.Equal(t, "acme/api/pull/42", ShortURL("https://www.github.com/acme/api/pull/42"))
+	assert.Equal(t, "acme/api/pull/42", ShortURL("http://github.com/acme/api/pull/42"))
+	assert.Equal(t, "https://gitlab.com/x/y", ShortURL("https://gitlab.com/x/y"))
+}
+
+func TestComputeStats(t *testing.T) {
+	results := []Result{
+		{PR: PR{State: "OPEN"}},
+		{PR: PR{State: "OPEN", IsDraft: true}},
+		{PR: PR{State: "OPEN", MergeStateStatus: "BLOCKED"}},
+		{PR: PR{State: "MERGED"}},
+		{PR: PR{State: "CLOSED"}},
+		{PR: PR{State: "OPEN", Queue: &MergeQueueEntry{State: "MERGEABLE"}}},
+		{Err: assert.AnError},
+	}
+	s := ComputeStats(results, 4)
+	assert.Equal(t, 7, s.Active)
+	assert.Equal(t, 4, s.Reviewed)
+	assert.Equal(t, 11, s.Total)
+	assert.Equal(t, 2, s.Open)
+	assert.Equal(t, 1, s.Draft)
+	assert.Equal(t, 1, s.Blocked)
+	assert.Equal(t, 1, s.Merged)
+	assert.Equal(t, 1, s.Closed)
+	assert.Equal(t, 1, s.Queued)
+	assert.Equal(t, 1, s.Errors)
+}
