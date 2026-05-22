@@ -1,6 +1,13 @@
 # Lefthook config — https://lefthook.dev
 # Install: brew install lefthook (or `go install github.com/evilmartians/lefthook@latest`)
 # Activate: lefthook install   (or `task install-hooks`)
+#
+# Optional tools used by some hooks (soft-fail if missing so contributors
+# aren't blocked — CI is the hard gate):
+#   - goimports : go install golang.org/x/tools/cmd/goimports@latest
+#   - shellcheck: brew install shellcheck
+#   - gitleaks  : brew install gitleaks
+#   - node/npx  : for commitlint (brew install node)
 
 pre-commit:
   parallel: true
@@ -14,12 +21,68 @@ pre-commit:
           echo "$unformatted"
           exit 1
         fi
+
+    # Detect missing/extra imports. Install:
+    #   go install golang.org/x/tools/cmd/goimports@latest
+    imports:
+      glob: "*.go"
+      run: |
+        if ! command -v goimports >/dev/null 2>&1; then
+          echo "goimports: not installed — skipping (install: go install golang.org/x/tools/cmd/goimports@latest)"
+          exit 0
+        fi
+        bad=$(goimports -l {staged_files})
+        if [ -n "$bad" ]; then
+          echo "goimports: files need import fixes:"
+          echo "$bad"
+          exit 1
+        fi
+
     vet:
       glob: "*.go"
       run: go vet ./...
+
+    # Full lint across the project. Kept as the safety net for the whole tree.
     lint:
       glob: "*.go"
       run: golangci-lint run ./...
+
+    # Lint only diffs vs previous commit so new code stays clean even if there
+    # is pre-existing lint debt elsewhere. Complements (not replaces) `lint`.
+    lint-new-only:
+      glob: "*.go"
+      run: golangci-lint run --new-from-rev=HEAD~1 ./...
+
+    # Fast test subset; the slow `-race` suite runs on pre-push.
+    test-short:
+      glob: "*.go"
+      run: go test -short ./...
+
+    # Shell script lint. Soft-fail if shellcheck is missing.
+    shellcheck:
+      glob: "{*.sh,scripts/*}"
+      run: |
+        if ! command -v shellcheck >/dev/null 2>&1; then
+          echo "shellcheck: not installed — skipping (install: brew install shellcheck)"
+          exit 0
+        fi
+        shellcheck {staged_files}
+
+    # Secret scan on staged changes only. Soft-fail if gitleaks is missing.
+    gitleaks:
+      run: |
+        if ! command -v gitleaks >/dev/null 2>&1; then
+          echo "gitleaks: not installed — skipping (install: brew install gitleaks)"
+          exit 0
+        fi
+        gitleaks protect --staged --no-banner
+
+# Conventional Commits enforcement. Uses commitlint via npx when node is
+# available; falls back to an inline regex check otherwise.
+commit-msg:
+  commands:
+    commitlint:
+      run: ./scripts/commit-msg-check.sh {1}
 
 pre-push:
   commands:
