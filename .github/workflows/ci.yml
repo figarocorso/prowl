@@ -67,6 +67,8 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: test
     runs-on: ubuntu-latest
+    # informational only — first run on main lacks baseline artifact
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
