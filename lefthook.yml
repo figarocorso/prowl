@@ -42,13 +42,9 @@ pre-commit:
       glob: "*.go"
       run: go vet ./...
 
-    # Full lint across the project. Kept as the safety net for the whole tree.
-    lint:
-      glob: "*.go"
-      run: golangci-lint run ./...
-
     # Lint only diffs vs previous commit so new code stays clean even if there
-    # is pre-existing lint debt elsewhere. Complements (not replaces) `lint`.
+    # is pre-existing lint debt elsewhere. Full `golangci-lint run ./...`
+    # runs in CI as the safety net for the whole tree.
     lint-new-only:
       glob: "*.go"
       run: golangci-lint run --new-from-rev=HEAD~1 ./...
