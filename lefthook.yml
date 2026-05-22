@@ -1,0 +1,29 @@
+# Lefthook config — https://lefthook.dev
+# Install: brew install lefthook (or `go install github.com/evilmartians/lefthook@latest`)
+# Activate: lefthook install   (or `task install-hooks`)
+
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.go"
+      run: |
+        unformatted=$(gofmt -l {staged_files})
+        if [ -n "$unformatted" ]; then
+          echo "gofmt: files need formatting:"
+          echo "$unformatted"
+          exit 1
+        fi
+    vet:
+      glob: "*.go"
+      run: go vet ./...
+    lint:
+      glob: "*.go"
+      run: golangci-lint run ./...
+
+pre-push:
+  commands:
+    test:
+      run: go test -race ./...
+    coverage:
+      run: ./scripts/coverage-check.sh

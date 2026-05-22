@@ -23,5 +23,7 @@ IDEAS.md
 /prowl
 /dist/
 coverage.out
+coverage.html
+coverage.txt
 *.test
 *.prof
