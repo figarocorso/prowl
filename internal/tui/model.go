@@ -20,7 +20,6 @@ var (
 	statusStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	errStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	okStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("46"))
-	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	mergedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
 	closedStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	keyStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true)
