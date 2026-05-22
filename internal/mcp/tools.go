@@ -163,7 +163,8 @@ func (s *Server) toolListPRs(ctx context.Context, args map[string]any) (toolResu
 		if rerr != nil {
 			return toolResult{}, rerr
 		}
-		urls = append(a, r...)
+		urls = append(urls, a...)
+		urls = append(urls, r...)
 	default:
 		return toolResult{}, fmt.Errorf("invalid source %q", source)
 	}

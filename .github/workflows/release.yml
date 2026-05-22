@@ -21,6 +21,11 @@ jobs:
           go-version: stable
           cache: true
 
+      # syft is invoked by goreleaser's `sboms:` block to produce per-archive
+      # SPDX JSON SBOMs.
+      - name: install syft
+        uses: anchore/sbom-action/download-syft@v0
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
