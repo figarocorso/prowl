@@ -20,6 +20,7 @@ func SetVersionInfo(version, commit, date string) {
 	rootCmd.Version = fmt.Sprintf("%s (commit %s, built %s)", version, commit, date)
 }
 
+// versionCmd prints the build version, commit, and date injected via ldflags.
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
