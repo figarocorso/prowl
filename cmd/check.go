@@ -113,7 +113,7 @@ func clipboardTool() string {
 }
 
 func checkWritable(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("mkdir: %w", err)
 	}
 	tmp, err := os.CreateTemp(dir, ".prowl-write-")
