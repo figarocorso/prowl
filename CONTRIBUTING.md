@@ -16,6 +16,12 @@ output.
 - Run the local CI before pushing (see below) so you catch failures in
   seconds instead of waiting on GitHub Actions.
 - Squash-merge is the default.
+- `main` is protected: signed commits, linear history, passing CI, and
+  no force pushes. See
+  [`.github/branch-protection.md`](./.github/branch-protection.md) for
+  the full policy and
+  [`scripts/apply-branch-protection.sh`](./scripts/apply-branch-protection.sh)
+  to (re-)apply it.
 
 ## Development
 
