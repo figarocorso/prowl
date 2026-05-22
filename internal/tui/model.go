@@ -190,6 +190,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				m.status = "Removed " + url
+				kept := m.rows[:0:0]
+				for _, r := range m.rows {
+					if r.URL != url {
+						kept = append(kept, r)
+					}
+				}
+				m.rows = kept
+				m.table.SetRows(rowsToTableRows(m.rows))
 				m.loading = true
 				return m, tea.Batch(m.spinner.Tick, fetchActiveCmd(m.store, m.client))
 			case "n", "N", "esc":
