@@ -1,24 +1,25 @@
+version: "2"
+
 run:
   timeout: 3m
 
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
-    - gofmt
-    - goimports
     - govet
     - ineffassign
     - misspell
     - revive
     - staticcheck
     - unused
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
 
-linters-settings:
-  revive:
-    rules:
-      - name: exported
-        disabled: true
-
-issues:
-  exclude-use-default: false
+formatters:
+  enable:
+    - gofmt
+    - goimports
