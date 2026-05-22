@@ -13,17 +13,9 @@ state (open / draft / merged / blocked), assignees, and GitHub merge-queue
 position — all in a Bubble Tea interactive table, with `Enter` to open the PR
 in your browser.
 
-```
-🦉 prowl  📊 2 open · 1 merged · 0 closed
+![prowl demo: prowl list followed by the interactive TUI navigating tracked PRs](docs/demo/demo.gif)
 
-  PR     │ Assignee   │ Status        │ Queue                │ Pos │ ETA │ URL
- ────────┼────────────┼───────────────┼──────────────────────┼─────┼─────┼──────────
-  #1234  │ alice      │ open          │ queued (mergeable)   │ 2   │ ~7m │ …pull/1234
-  #1235  │ bob,carol  │ open/blocked  │ -                    │ -   │ -   │ …pull/1235
-  #1198  │ dave       │ merged        │ -                    │ -   │ -   │ …pull/1198
-
-  ↑↓ nav · ⏎ open · c copy · d delete · r refresh · q quit
-```
+> Re-record with `vhs docs/demo/demo.tape` — see [`docs/demo/`](./docs/demo/).
 
 ## Features
 
