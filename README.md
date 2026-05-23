@@ -40,29 +40,65 @@ binary is not on your shell `PATH` — see the notes under each method.
 
 ### Homebrew (macOS / Linux)
 
+Copy-paste this and you're done — `gh` is pulled in as a formula dependency:
+
 ```sh
 brew install figarocorso/tap/prowl
+gh auth login          # follow the prompts (skip if already authenticated)
+prowl check
 ```
 
 The tap lives at [`figarocorso/homebrew-tap`](https://github.com/figarocorso/homebrew-tap)
 and is updated automatically on every release.
 
-### `go install`
+### `go install` (Linux quick start)
+
+Three copy-paste blocks: install Go, install `gh` + helpers, then install
+prowl. If you already have a recent Go toolchain on your `PATH`, skip to
+Step 3.
+
+#### Step 1 — install Go
+
+Pick **one** of the two options. Option B is recommended because some apt
+repos ship a Go version older than `go install` accepts.
+
+**Option A — distro package (Ubuntu 24.04+ / Debian trixie+):**
+
+```sh
+sudo apt update && sudo apt install -y golang-go
+echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+**Option B — official tarball (any distro, latest stable Go):**
+
+```sh
+GO_VER=1.23.4
+curl -fsSL https://go.dev/dl/go${GO_VER}.linux-amd64.tar.gz | sudo tar -C /usr/local -xz
+echo 'export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
+```
+
+Full Go install docs: <https://go.dev/doc/install>.
+
+#### Step 2 — install `gh` and clipboard / browser helpers
+
+```sh
+sudo apt update && sudo apt install -y gh xdg-utils xclip
+gh auth login          # follow the prompts
+```
+
+`xdg-utils` lets prowl open PRs in your browser; `xclip` enables the copy-URL
+shortcut. Both are optional but recommended.
+
+#### Step 3 — install prowl
 
 ```sh
 go install github.com/figarocorso/prowl@latest
+prowl check
 ```
 
-This drops the binary in `$(go env GOBIN)` (if set) or `$(go env GOPATH)/bin`
-(typically `~/go/bin`). Add it to your shell `PATH` once:
-
-```sh
-# zsh
-echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-
-# bash
-echo 'export PATH="$HOME/go/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc
-```
+`go install` drops the binary in `$(go env GOBIN)` (if set) or
+`$(go env GOPATH)/bin` — typically `~/go/bin`, which Step 1 already added to
+your `PATH`.
 
 ### Pre-built binaries
 

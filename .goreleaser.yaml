@@ -80,6 +80,8 @@ brews:
       name: figarocorso
       email: figarocorso@users.noreply.github.com
     directory: Formula
+    dependencies:
+      - name: gh
     install: |
       bin.install "prowl"
     test: |
