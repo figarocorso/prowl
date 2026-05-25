@@ -77,6 +77,62 @@ func QueueLabelShort(pr PR) string {
 	}
 }
 
+// DetailsLabel returns the compact "status details" column. When the PR is in
+// the merge queue it summarises queue state + position + ETA; when the PR is
+// open/blocked it explains why (review required, conflicts, behind base, etc.)
+// using MergeStateStatus and ReviewDecision. Otherwise returns "-".
+func DetailsLabel(pr PR) string {
+	if pr.Queue != nil {
+		return queueDetail(pr)
+	}
+	if strings.ToUpper(pr.State) != "OPEN" || pr.IsDraft {
+		return "-"
+	}
+	switch strings.ToUpper(pr.MergeStateStatus) {
+	case "DIRTY":
+		return "conflicts"
+	case "BEHIND":
+		return "behind base"
+	case "UNSTABLE":
+		return "checks failing"
+	case "HAS_HOOKS":
+		return "hooks pending"
+	case "BLOCKED":
+		switch strings.ToUpper(pr.ReviewDecision) {
+		case "REVIEW_REQUIRED":
+			return "review required"
+		case "CHANGES_REQUESTED":
+			return "changes requested"
+		}
+		// Approved (or no decision) but still blocked: the secondary
+		// statusCheckRollup query disambiguates between failing/pending
+		// checks and pure branch-protection holds.
+		switch strings.ToUpper(pr.CheckRollupState) {
+		case "FAILURE", "ERROR":
+			return "checks failing"
+		case "PENDING", "EXPECTED":
+			return "checks pending"
+		case "SUCCESS":
+			return "branch protection"
+		}
+		return "blocked"
+	}
+	return "-"
+}
+
+// queueDetail formats the queue summary as "<state> #<pos> ~<eta>", omitting
+// position/ETA when GitHub doesn't report them.
+func queueDetail(pr PR) string {
+	parts := []string{QueueLabelShort(pr)}
+	if p := QueuePositionLabel(pr); p != "-" {
+		parts = append(parts, "#"+p)
+	}
+	if e := ETALabel(pr); e != "-" {
+		parts = append(parts, e)
+	}
+	return strings.Join(parts, " ")
+}
+
 // ShortURL trims the `https://github.com/` (or www / http) prefix so URLs
 // fit in a compact table column. Non-github URLs are returned unchanged.
 func ShortURL(u string) string {

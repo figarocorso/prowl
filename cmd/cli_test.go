@@ -167,23 +167,19 @@ func TestWatchRejectsTooLowInterval(t *testing.T) {
 
 func TestListSmartWidthsShrinkEmptyCols(t *testing.T) {
 	_, _ = setupCLI(t)
-	// Add a PR that has no queue → Queue/Pos/ETA all "-".
-	_, _, err := execCLI(t, "add", "https://github.com/acme/api/pull/1235")
+	// Draft PR → Assignee "-" + Details "-" → both columns collapse.
+	_, _, err := execCLI(t, "add", "https://github.com/acme/api/pull/1199")
 	require.NoError(t, err)
 
 	stdout, _, err := execCLI(t, "list")
 	require.NoError(t, err)
 
 	header := strings.Split(stdout, "\n")[0]
-	// Queue/Pos/ETA columns have no data → header-sized only.
-	queueIdx := strings.Index(header, "Queue")
-	posIdx := strings.Index(header, "Pos")
-	etaIdx := strings.Index(header, "ETA")
-	require.Greater(t, posIdx, queueIdx)
-	require.Greater(t, etaIdx, posIdx)
-	// "Queue" (5) + 2 pad → 7 cols until "Pos".
-	assert.Equal(t, 7, posIdx-queueIdx, "Queue column should size to its header when empty")
-	assert.Equal(t, 5, etaIdx-posIdx, "Pos column should size to its header when empty")
+	detailsIdx := strings.Index(header, "Details")
+	titleIdx := strings.Index(header, "Title")
+	require.Greater(t, titleIdx, detailsIdx)
+	// "Details" (7) + 2 pad → 9 cols until "Title".
+	assert.Equal(t, 9, titleIdx-detailsIdx, "Details column should size to its header when empty")
 }
 
 func TestStatsJSON(t *testing.T) {

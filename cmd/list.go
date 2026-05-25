@@ -112,7 +112,7 @@ const minTitleWidth = 20
 
 func renderTable(out io.Writer, results []data.Result) error {
 	plain := ui.IsPlain(out)
-	headers := []string{"URL", "Assignee", "Status", "Queue", "Pos", "ETA", "Title"}
+	headers := []string{"URL", "Assignee", "Status", "Details", "Title"}
 	rows := buildTableRows(plain, headers, results)
 	widths := smartColumnWidths(rows, headers, terminalWidth(out))
 	for _, row := range rows {
@@ -159,18 +159,16 @@ func resultToRow(plain bool, r data.Result) []tableCell {
 	return row
 }
 
-func rawRowValues(r data.Result) [7]string {
+func rawRowValues(r data.Result) [5]string {
 	if r.Err != nil {
-		return [7]string{data.ShortURL(r.URL), "-", "error", "-", "-", "-", "-"}
+		return [5]string{data.ShortURL(r.URL), "-", "error", "-", "-"}
 	}
 	pr := r.PR
-	return [7]string{
+	return [5]string{
 		data.ShortURL(pr.URL),
 		data.AssigneesLabel(pr),
 		data.StatusLabel(pr),
-		data.QueueLabelShort(pr),
-		data.QueuePositionLabel(pr),
-		data.ETALabel(pr),
+		data.DetailsLabel(pr),
 		pr.Title,
 	}
 }
@@ -181,8 +179,6 @@ func renderCellValue(plain bool, col int, v string) string {
 		return ui.Dim(plain, v)
 	case 2:
 		return ui.StatusBadge(plain, v)
-	case 6:
-		return v
 	default:
 		return v
 	}

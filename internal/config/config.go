@@ -141,5 +141,5 @@ func mergeFileConfig(cfg *Config, path string) error {
 }
 
 func defaultColumns() []string {
-	return []string{"PR", "Assignee", "Status", "Queue", "Pos", "ETA", "URL"}
+	return []string{"PR", "Assignee", "Status", "Details", "URL"}
 }
