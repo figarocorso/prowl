@@ -132,7 +132,7 @@ func New(cfg *config.Config, s *store.Store, client data.PRClient) *Model {
 	}
 }
 
-var columnHeaders = []string{"URL", "Assignee", "Status", "Queue", "Pos", "ETA", "Title"}
+var columnHeaders = []string{"URL", "Assignee", "Status", "Details", "Title"}
 
 // columnPad is the extra breathing room added to each non-Title column on top
 // of its widest cell.
@@ -640,16 +640,14 @@ func (m *Model) selectedURL() string {
 // declared by columnHeaders.
 func resultCells(r data.Result) []string {
 	if r.Err != nil {
-		return []string{data.ShortURL(r.URL), "-", statusEmojiLabel("error"), "-", "-", "-", "-"}
+		return []string{data.ShortURL(r.URL), "-", statusEmojiLabel("error"), "-", "-"}
 	}
 	pr := r.PR
 	return []string{
 		data.ShortURL(pr.URL),
 		data.AssigneesLabel(pr),
 		statusEmojiLabel(data.StatusLabel(pr)),
-		data.QueueLabelShort(pr),
-		data.QueuePositionLabel(pr),
-		data.ETALabel(pr),
+		data.DetailsLabel(pr),
 		pr.Title,
 	}
 }

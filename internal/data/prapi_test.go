@@ -2,8 +2,10 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,11 +144,138 @@ func TestQueueLabelShort(t *testing.T) {
 	assert.Equal(t, "weird", QueueLabelShort(PR{Queue: &MergeQueueEntry{State: "WEIRD"}}))
 }
 
+func TestDetailsLabel(t *testing.T) {
+	// non-OPEN or draft → "-"
+	assert.Equal(t, "-", DetailsLabel(PR{State: "MERGED"}))
+	assert.Equal(t, "-", DetailsLabel(PR{State: "CLOSED"}))
+	assert.Equal(t, "-", DetailsLabel(PR{State: "OPEN", IsDraft: true}))
+	assert.Equal(t, "-", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "CLEAN"}))
+
+	// open/blocked variants
+	assert.Equal(t, "conflicts", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "DIRTY"}))
+	assert.Equal(t, "behind base", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BEHIND"}))
+	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE"}))
+	assert.Equal(t, "hooks pending", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "HAS_HOOKS"}))
+	assert.Equal(t, "blocked", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED"}))
+	assert.Equal(t, "review required", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "REVIEW_REQUIRED"}))
+	assert.Equal(t, "changes requested", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "CHANGES_REQUESTED"}))
+
+	// blocked + approved/no-decision → use rollup state
+	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED", CheckRollupState: "FAILURE"}))
+	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED", CheckRollupState: "ERROR"}))
+	assert.Equal(t, "checks pending", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED", CheckRollupState: "PENDING"}))
+	assert.Equal(t, "branch protection", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED", CheckRollupState: "SUCCESS"}))
+	assert.Equal(t, "branch protection", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", CheckRollupState: "SUCCESS"}))
+	// blocked + approved without rollup state → generic
+	assert.Equal(t, "blocked", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED"}))
+
+	// queued — queue info overrides block reason
+	assert.Equal(t, "queued #3 ~7m", DetailsLabel(PR{
+		State: "OPEN", MergeStateStatus: "BLOCKED",
+		Queue: &MergeQueueEntry{State: "QUEUED", Position: 3, ETA: 7 * time.Minute},
+	}))
+	assert.Equal(t, "ready", DetailsLabel(PR{
+		State: "OPEN", Queue: &MergeQueueEntry{State: "MERGEABLE"},
+	}))
+	assert.Equal(t, "checks #1 ~30s", DetailsLabel(PR{
+		State: "OPEN", Queue: &MergeQueueEntry{State: "AWAITING_CHECKS", Position: 1, ETA: 30 * time.Second},
+	}))
+}
+
 func TestShortURL(t *testing.T) {
 	assert.Equal(t, "acme/api/pull/42", ShortURL("https://github.com/acme/api/pull/42"))
 	assert.Equal(t, "acme/api/pull/42", ShortURL("https://www.github.com/acme/api/pull/42"))
 	assert.Equal(t, "acme/api/pull/42", ShortURL("http://github.com/acme/api/pull/42"))
 	assert.Equal(t, "https://gitlab.com/x/y", ShortURL("https://gitlab.com/x/y"))
+}
+
+func TestNeedsCheckRollup(t *testing.T) {
+	cases := []struct {
+		name string
+		pr   PR
+		want bool
+	}{
+		{"blocked + approved", PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED"}, true},
+		{"blocked + no decision", PR{State: "OPEN", MergeStateStatus: "BLOCKED"}, true},
+		{"blocked + review required", PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "REVIEW_REQUIRED"}, false},
+		{"blocked + changes requested", PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "CHANGES_REQUESTED"}, false},
+		{"clean", PR{State: "OPEN", MergeStateStatus: "CLEAN", ReviewDecision: "APPROVED"}, false},
+		{"draft", PR{State: "OPEN", MergeStateStatus: "BLOCKED", IsDraft: true}, false},
+		{"queued", PR{State: "OPEN", MergeStateStatus: "BLOCKED", Queue: &MergeQueueEntry{State: "MERGEABLE"}}, false},
+		{"merged", PR{State: "MERGED", MergeStateStatus: "BLOCKED"}, false},
+	}
+	for _, tc := range cases {
+		assert.Equal(t, tc.want, needsCheckRollup(tc.pr), tc.name)
+	}
+}
+
+type stubGQL struct {
+	calls []string
+	resp  map[string]any
+}
+
+func (s *stubGQL) Do(query string, _ map[string]any, response any) error {
+	switch {
+	case strings.Contains(query, "mergeStateStatus"):
+		s.calls = append(s.calls, "main")
+	case strings.Contains(query, "statusCheckRollup"):
+		s.calls = append(s.calls, "rollup")
+	default:
+		s.calls = append(s.calls, "other")
+	}
+	if r, ok := s.resp[s.calls[len(s.calls)-1]]; ok {
+		b, _ := json.Marshal(r)
+		return json.Unmarshal(b, response)
+	}
+	return nil
+}
+
+func TestFetchConditionalRollup(t *testing.T) {
+	mainBlockedApproved := map[string]any{
+		"repository": map[string]any{
+			"pullRequest": map[string]any{
+				"number": 1, "title": "x", "state": "OPEN",
+				"mergeStateStatus": "BLOCKED", "reviewDecision": "APPROVED",
+			},
+		},
+	}
+	mainBlockedReviewRequired := map[string]any{
+		"repository": map[string]any{
+			"pullRequest": map[string]any{
+				"number": 1, "title": "x", "state": "OPEN",
+				"mergeStateStatus": "BLOCKED", "reviewDecision": "REVIEW_REQUIRED",
+			},
+		},
+	}
+	rollupFailure := map[string]any{
+		"repository": map[string]any{
+			"pullRequest": map[string]any{
+				"commits": map[string]any{
+					"nodes": []map[string]any{{
+						"commit": map[string]any{
+							"statusCheckRollup": map[string]any{"state": "FAILURE"},
+						},
+					}},
+				},
+			},
+		},
+	}
+
+	// 1. Ambiguous case → rollup is fetched.
+	stub := &stubGQL{resp: map[string]any{"main": mainBlockedApproved, "rollup": rollupFailure}}
+	c := &GHClient{gql: stub}
+	pr, err := c.Fetch(context.Background(), "https://github.com/acme/api/pull/1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"main", "rollup"}, stub.calls)
+	assert.Equal(t, "FAILURE", pr.CheckRollupState)
+
+	// 2. Unambiguous case → no rollup fetch.
+	stub = &stubGQL{resp: map[string]any{"main": mainBlockedReviewRequired}}
+	c = &GHClient{gql: stub}
+	pr, err = c.Fetch(context.Background(), "https://github.com/acme/api/pull/1")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"main"}, stub.calls)
+	assert.Equal(t, "", pr.CheckRollupState)
 }
 
 func TestComputeStats(t *testing.T) {

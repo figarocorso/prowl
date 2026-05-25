@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,8 @@ type PR struct {
 	Title            string           `json:"title,omitempty"`
 	State            string           `json:"state"`
 	MergeStateStatus string           `json:"merge_state_status,omitempty"`
+	ReviewDecision   string           `json:"review_decision,omitempty"`
+	CheckRollupState string           `json:"check_rollup_state,omitempty"`
 	IsDraft          bool             `json:"is_draft"`
 	Assignees        []string         `json:"assignees,omitempty"`
 	Queue            *MergeQueueEntry `json:"queue,omitempty"`
@@ -102,6 +105,7 @@ const prQuery = `query ($owner:String!,$repo:String!,$num:Int!) {
       title
       state
       mergeStateStatus
+      reviewDecision
       isDraft
       assignees(first:10) { nodes { login } }
       mergeQueueEntry { state position estimatedTimeToMerge }
@@ -116,6 +120,7 @@ type prGQLResponse struct {
 			Title            string `json:"title"`
 			State            string `json:"state"`
 			MergeStateStatus string `json:"mergeStateStatus"`
+			ReviewDecision   string `json:"reviewDecision"`
 			IsDraft          bool   `json:"isDraft"`
 			Assignees        struct {
 				Nodes []struct {
@@ -129,6 +134,73 @@ type prGQLResponse struct {
 			} `json:"mergeQueueEntry"`
 		} `json:"pullRequest"`
 	} `json:"repository"`
+}
+
+const checkRollupQuery = `query ($owner:String!,$repo:String!,$num:Int!) {
+  repository(owner:$owner,name:$repo) {
+    pullRequest(number:$num) {
+      commits(last:1) { nodes { commit { statusCheckRollup { state } } } }
+    }
+  }
+}`
+
+type checkRollupGQLResponse struct {
+	Repository struct {
+		PullRequest *struct {
+			Commits struct {
+				Nodes []struct {
+					Commit struct {
+						StatusCheckRollup *struct {
+							State string `json:"state"`
+						} `json:"statusCheckRollup"`
+					} `json:"commit"`
+				} `json:"nodes"`
+			} `json:"commits"`
+		} `json:"pullRequest"`
+	} `json:"repository"`
+}
+
+// needsCheckRollup reports whether a PR's "blocked" reason is ambiguous from
+// the main query (BLOCKED + approved/no-decision, not draft, not queued) and
+// therefore benefits from the secondary statusCheckRollup query.
+func needsCheckRollup(pr PR) bool {
+	if pr.Queue != nil || pr.IsDraft {
+		return false
+	}
+	if !strings.EqualFold(pr.State, "OPEN") {
+		return false
+	}
+	if !strings.EqualFold(pr.MergeStateStatus, "BLOCKED") {
+		return false
+	}
+	switch strings.ToUpper(pr.ReviewDecision) {
+	case "APPROVED", "":
+		return true
+	}
+	return false
+}
+
+// fetchCheckRollup runs the secondary GraphQL query that returns the aggregate
+// statusCheckRollup state for the PR's latest commit. Returns "" when the PR
+// has no commit/rollup yet, so callers can treat it as "unknown".
+func (c *GHClient) fetchCheckRollup(ctx context.Context, owner, repo string, num int) (string, error) {
+	_ = ctx
+	var resp checkRollupGQLResponse
+	if err := c.gql.Do(checkRollupQuery, map[string]any{
+		"owner": owner,
+		"repo":  repo,
+		"num":   num,
+	}, &resp); err != nil {
+		return "", err
+	}
+	if resp.Repository.PullRequest == nil || len(resp.Repository.PullRequest.Commits.Nodes) == 0 {
+		return "", nil
+	}
+	rollup := resp.Repository.PullRequest.Commits.Nodes[0].Commit.StatusCheckRollup
+	if rollup == nil {
+		return "", nil
+	}
+	return rollup.State, nil
 }
 
 // Fetch retrieves a single PR by URL.
@@ -159,6 +231,7 @@ func (c *GHClient) Fetch(ctx context.Context, url string) (PR, error) {
 		Title:            p.Title,
 		State:            p.State,
 		MergeStateStatus: p.MergeStateStatus,
+		ReviewDecision:   p.ReviewDecision,
 		IsDraft:          p.IsDraft,
 	}
 	for _, a := range p.Assignees.Nodes {
@@ -173,6 +246,13 @@ func (c *GHClient) Fetch(ctx context.Context, url string) (PR, error) {
 			entry.ETA = time.Duration(*p.MergeQueueEntry.EstimatedTimeToMerge) * time.Second
 		}
 		out.Queue = entry
+	}
+	if needsCheckRollup(out) {
+		// Best-effort: a rollup fetch error shouldn't blank out the rest of
+		// the PR. DetailsLabel falls back to "blocked" when state is empty.
+		if state, err := c.fetchCheckRollup(ctx, owner, repo, num); err == nil {
+			out.CheckRollupState = state
+		}
 	}
 	return out, nil
 }
