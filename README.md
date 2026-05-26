@@ -212,7 +212,7 @@ prowl looks for an optional YAML config at
 
 ```yaml
 refresh_interval: 30s
-columns: [PR, Assignee, Status, Queue, URL]
+columns: [PR, Assignee, Status, Details, URL]
 ```
 
 ### Raycast integration (macOS)
