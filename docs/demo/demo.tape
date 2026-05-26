@@ -41,18 +41,32 @@ Sleep 800ms
 Up
 Sleep 1s
 
-# Add a new PR live via the slash-command palette.
+# Add an open PR live via the slash-command palette.
 Type "/"
 Sleep 600ms
-Type "add https://github.com/figarocorso/prowl/pull/28"
+Type "add https://github.com/figarocorso/prowl/pull/36"
 Sleep 800ms
 Enter
-Sleep 3s
+Sleep 4s
+Down
+Sleep 700ms
+Down
+Sleep 700ms
+Down
+Sleep 1200ms
 
-# Quit — prowl asks whether to archive the merged ones.
+# Quit — prowl offers to archive the merged ones. Confirm.
 Type "q"
 Sleep 2500ms
-Type "n"
+Type "y"
+Sleep 1500ms
+
+# Re-enter prowl: merged are gone, only the open PR remains.
+Type "prowl"
+Sleep 400ms
+Enter
+Sleep 3500ms
+Type "q"
 Sleep 800ms
 
 # Same list, now ready for AI agents.
