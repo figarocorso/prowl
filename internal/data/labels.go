@@ -94,6 +94,14 @@ func DetailsLabel(pr PR) string {
 	case "BEHIND":
 		return "behind base"
 	case "UNSTABLE":
+		// UNSTABLE = mergeable but commit status non-passing (failing OR
+		// pending). The secondary statusCheckRollup query disambiguates.
+		switch strings.ToUpper(pr.CheckRollupState) {
+		case "PENDING", "EXPECTED":
+			return "checks pending"
+		case "FAILURE", "ERROR":
+			return "checks failing"
+		}
 		return "checks failing"
 	case "HAS_HOOKS":
 		return "hooks pending"
