@@ -96,36 +96,49 @@ func DetailsLabel(pr PR) string {
 	case "UNSTABLE":
 		// UNSTABLE = mergeable but commit status non-passing (failing OR
 		// pending). The secondary statusCheckRollup query disambiguates.
-		switch strings.ToUpper(pr.CheckRollupState) {
-		case "PENDING", "EXPECTED":
-			return "checks pending"
-		case "FAILURE", "ERROR":
-			return "checks failing"
+		if label, ok := rollupCheckLabel(pr.CheckRollupState); ok {
+			return label
 		}
 		return "checks failing"
 	case "HAS_HOOKS":
 		return "hooks pending"
 	case "BLOCKED":
-		switch strings.ToUpper(pr.ReviewDecision) {
-		case "REVIEW_REQUIRED":
-			return "review required"
-		case "CHANGES_REQUESTED":
-			return "changes requested"
-		}
-		// Approved (or no decision) but still blocked: the secondary
-		// statusCheckRollup query disambiguates between failing/pending
-		// checks and pure branch-protection holds.
-		switch strings.ToUpper(pr.CheckRollupState) {
-		case "FAILURE", "ERROR":
-			return "checks failing"
-		case "PENDING", "EXPECTED":
-			return "checks pending"
-		case "SUCCESS":
-			return "branch protection"
-		}
-		return "blocked"
+		return blockedDetail(pr)
 	}
 	return "-"
+}
+
+// rollupCheckLabel maps a statusCheckRollup state to the "checks ..." detail
+// string. Returns (label, true) for FAILURE/ERROR/PENDING/EXPECTED. The
+// SUCCESS case is handled by the caller because its meaning depends on
+// MergeStateStatus (BLOCKED → branch protection, UNSTABLE → unreachable).
+func rollupCheckLabel(state string) (string, bool) {
+	switch strings.ToUpper(state) {
+	case "FAILURE", "ERROR":
+		return "checks failing", true
+	case "PENDING", "EXPECTED":
+		return "checks pending", true
+	}
+	return "", false
+}
+
+// blockedDetail explains why a BLOCKED PR is stuck: pending review, requested
+// changes, or — when approved/no-decision — failing/pending checks vs pure
+// branch-protection holds.
+func blockedDetail(pr PR) string {
+	switch strings.ToUpper(pr.ReviewDecision) {
+	case "REVIEW_REQUIRED":
+		return "review required"
+	case "CHANGES_REQUESTED":
+		return "changes requested"
+	}
+	if label, ok := rollupCheckLabel(pr.CheckRollupState); ok {
+		return label
+	}
+	if strings.EqualFold(pr.CheckRollupState, "SUCCESS") {
+		return "branch protection"
+	}
+	return "blocked"
 }
 
 // queueDetail formats the queue summary as "<state> #<pos> ~<eta>", omitting
