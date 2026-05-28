@@ -160,9 +160,13 @@ type checkRollupGQLResponse struct {
 	} `json:"repository"`
 }
 
-// needsCheckRollup reports whether a PR's "blocked" reason is ambiguous from
-// the main query (BLOCKED + approved/no-decision, not draft, not queued) and
-// therefore benefits from the secondary statusCheckRollup query.
+// needsCheckRollup reports whether a PR's status is ambiguous from the main
+// query and therefore benefits from the secondary statusCheckRollup query.
+// Two cases:
+//   - BLOCKED + approved/no-decision: disambiguate failing/pending checks
+//     vs pure branch-protection holds.
+//   - UNSTABLE: mergeable but commit status non-passing — could be failing
+//     or pending.
 func needsCheckRollup(pr PR) bool {
 	if pr.Queue != nil || pr.IsDraft {
 		return false
@@ -170,12 +174,14 @@ func needsCheckRollup(pr PR) bool {
 	if !strings.EqualFold(pr.State, "OPEN") {
 		return false
 	}
-	if !strings.EqualFold(pr.MergeStateStatus, "BLOCKED") {
-		return false
-	}
-	switch strings.ToUpper(pr.ReviewDecision) {
-	case "APPROVED", "":
+	switch strings.ToUpper(pr.MergeStateStatus) {
+	case "UNSTABLE":
 		return true
+	case "BLOCKED":
+		switch strings.ToUpper(pr.ReviewDecision) {
+		case "APPROVED", "":
+			return true
+		}
 	}
 	return false
 }

@@ -155,6 +155,10 @@ func TestDetailsLabel(t *testing.T) {
 	assert.Equal(t, "conflicts", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "DIRTY"}))
 	assert.Equal(t, "behind base", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BEHIND"}))
 	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE"}))
+	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE", CheckRollupState: "FAILURE"}))
+	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE", CheckRollupState: "ERROR"}))
+	assert.Equal(t, "checks pending", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE", CheckRollupState: "PENDING"}))
+	assert.Equal(t, "checks pending", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE", CheckRollupState: "EXPECTED"}))
 	assert.Equal(t, "hooks pending", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "HAS_HOOKS"}))
 	assert.Equal(t, "blocked", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED"}))
 	assert.Equal(t, "review required", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "REVIEW_REQUIRED"}))
@@ -199,9 +203,13 @@ func TestNeedsCheckRollup(t *testing.T) {
 		{"blocked + no decision", PR{State: "OPEN", MergeStateStatus: "BLOCKED"}, true},
 		{"blocked + review required", PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "REVIEW_REQUIRED"}, false},
 		{"blocked + changes requested", PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "CHANGES_REQUESTED"}, false},
+		{"unstable", PR{State: "OPEN", MergeStateStatus: "UNSTABLE"}, true},
+		{"unstable + review required", PR{State: "OPEN", MergeStateStatus: "UNSTABLE", ReviewDecision: "REVIEW_REQUIRED"}, true},
 		{"clean", PR{State: "OPEN", MergeStateStatus: "CLEAN", ReviewDecision: "APPROVED"}, false},
 		{"draft", PR{State: "OPEN", MergeStateStatus: "BLOCKED", IsDraft: true}, false},
+		{"unstable + draft", PR{State: "OPEN", MergeStateStatus: "UNSTABLE", IsDraft: true}, false},
 		{"queued", PR{State: "OPEN", MergeStateStatus: "BLOCKED", Queue: &MergeQueueEntry{State: "MERGEABLE"}}, false},
+		{"unstable + queued", PR{State: "OPEN", MergeStateStatus: "UNSTABLE", Queue: &MergeQueueEntry{State: "MERGEABLE"}}, false},
 		{"merged", PR{State: "MERGED", MergeStateStatus: "BLOCKED"}, false},
 	}
 	for _, tc := range cases {
