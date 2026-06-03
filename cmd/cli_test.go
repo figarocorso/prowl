@@ -67,7 +67,7 @@ func TestAddListJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(stdout), &rows))
 	require.Len(t, rows, 2)
 	assert.Equal(t, 1234, rows[0].Number)
-	assert.Equal(t, "open", rows[0].Status)
+	assert.Equal(t, "queued", rows[0].Status)
 	assert.Equal(t, "open/blocked", rows[1].Status)
 }
 
@@ -202,8 +202,9 @@ func TestStatsJSON(t *testing.T) {
 	assert.Equal(t, 2, st.Active)
 	assert.Equal(t, 1, st.Reviewed)
 	assert.Equal(t, 3, st.Total)
-	assert.Equal(t, 1, st.Open)
+	assert.Equal(t, 0, st.Open)
 	assert.Equal(t, 1, st.Blocked)
+	assert.Equal(t, 1, st.Queued)
 }
 
 func TestListShowsTitleColumn(t *testing.T) {

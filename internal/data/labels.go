@@ -17,6 +17,9 @@ func StatusLabel(pr PR) string {
 		if pr.IsDraft {
 			return "draft"
 		}
+		if pr.Queue != nil {
+			return "queued"
+		}
 		switch strings.ToUpper(pr.MergeStateStatus) {
 		case "BLOCKED", "BEHIND", "DIRTY", "DRAFT":
 			return "open/blocked"

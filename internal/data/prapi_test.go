@@ -91,6 +91,7 @@ func TestStatusLabel(t *testing.T) {
 	cases := map[string]PR{
 		"open":         {State: "OPEN", MergeStateStatus: "CLEAN"},
 		"open/blocked": {State: "OPEN", MergeStateStatus: "BLOCKED"},
+		"queued":       {State: "OPEN", MergeStateStatus: "BLOCKED", Queue: &MergeQueueEntry{State: "MERGEABLE"}},
 		"draft":        {State: "OPEN", IsDraft: true},
 		"merged":       {State: "MERGED"},
 		"closed":       {State: "CLOSED"},
@@ -306,7 +307,7 @@ func TestComputeStats(t *testing.T) {
 	assert.Equal(t, 7, s.Active)
 	assert.Equal(t, 4, s.Reviewed)
 	assert.Equal(t, 11, s.Total)
-	assert.Equal(t, 2, s.Open)
+	assert.Equal(t, 1, s.Open)
 	assert.Equal(t, 1, s.Draft)
 	assert.Equal(t, 1, s.Blocked)
 	assert.Equal(t, 1, s.Merged)
