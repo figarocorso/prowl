@@ -602,7 +602,7 @@ func (m *Model) View() string {
 		b.WriteString(hintStyle.Render("   (commands: add <url>, usage, archive · esc cancels)"))
 	default:
 		hints := []string{
-			keyStyle.Render("↑↓") + hintStyle.Render(" nav"),
+			keyStyle.Render("↑↓/jk") + hintStyle.Render(" nav"),
 			keyStyle.Render("⏎") + hintStyle.Render(" open"),
 			keyStyle.Render("c") + hintStyle.Render(" copy"),
 			keyStyle.Render("d") + hintStyle.Render(" delete"),
