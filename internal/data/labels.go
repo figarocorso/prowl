@@ -92,6 +92,11 @@ func DetailsLabel(pr PR) string {
 	case "DIRTY":
 		return "conflicts"
 	case "BEHIND":
+		// A PR can be behind base AND awaiting/blocked on review. The review
+		// hold is the more actionable blocker, so surface it first.
+		if label, ok := reviewBlockDetail(pr); ok {
+			return label
+		}
 		return "behind base"
 	case "UNSTABLE":
 		// UNSTABLE = mergeable but commit status non-passing (failing OR
@@ -122,18 +127,35 @@ func rollupCheckLabel(state string) (string, bool) {
 	return "", false
 }
 
+// reviewBlockDetail maps a pending review decision to its detail string,
+// returning (label, true) for REVIEW_REQUIRED/CHANGES_REQUESTED. Shared by the
+// BLOCKED and BEHIND cases so a review hold is surfaced regardless of whether
+// the branch also happens to be behind base.
+func reviewBlockDetail(pr PR) (string, bool) {
+	switch strings.ToUpper(pr.ReviewDecision) {
+	case "REVIEW_REQUIRED":
+		return "review required", true
+	case "CHANGES_REQUESTED":
+		return "changes requested", true
+	}
+	return "", false
+}
+
 // blockedDetail explains why a BLOCKED PR is stuck: pending review, requested
 // changes, or — when approved/no-decision — failing/pending checks vs pure
 // branch-protection holds.
 func blockedDetail(pr PR) string {
-	switch strings.ToUpper(pr.ReviewDecision) {
-	case "REVIEW_REQUIRED":
-		return "review required"
-	case "CHANGES_REQUESTED":
-		return "changes requested"
+	if label, ok := reviewBlockDetail(pr); ok {
+		return label
 	}
 	if label, ok := rollupCheckLabel(pr.CheckRollupState); ok {
 		return label
+	}
+	// Checks pass / no review decision: the most common remaining branch-
+	// protection hold is an unresolved review conversation. Name it explicitly
+	// rather than the vague "branch protection".
+	if pr.UnresolvedThreads > 0 {
+		return "unresolved comments"
 	}
 	if strings.EqualFold(pr.CheckRollupState, "SUCCESS") {
 		return "branch protection"
