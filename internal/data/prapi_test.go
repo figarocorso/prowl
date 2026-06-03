@@ -154,6 +154,9 @@ func TestDetailsLabel(t *testing.T) {
 	// open/blocked variants
 	assert.Equal(t, "conflicts", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "DIRTY"}))
 	assert.Equal(t, "behind base", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BEHIND"}))
+	// behind base but also blocked on review → review hold takes precedence
+	assert.Equal(t, "review required", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BEHIND", ReviewDecision: "REVIEW_REQUIRED"}))
+	assert.Equal(t, "changes requested", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BEHIND", ReviewDecision: "CHANGES_REQUESTED"}))
 	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE"}))
 	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE", CheckRollupState: "FAILURE"}))
 	assert.Equal(t, "checks failing", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "UNSTABLE", CheckRollupState: "ERROR"}))
@@ -170,6 +173,9 @@ func TestDetailsLabel(t *testing.T) {
 	assert.Equal(t, "checks pending", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED", CheckRollupState: "PENDING"}))
 	assert.Equal(t, "branch protection", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED", CheckRollupState: "SUCCESS"}))
 	assert.Equal(t, "branch protection", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", CheckRollupState: "SUCCESS"}))
+	// unresolved review conversation → named instead of vague "branch protection"
+	assert.Equal(t, "unresolved comments", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", CheckRollupState: "SUCCESS", UnresolvedThreads: 1}))
+	assert.Equal(t, "unresolved comments", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", UnresolvedThreads: 2}))
 	// blocked + approved without rollup state → generic
 	assert.Equal(t, "blocked", DetailsLabel(PR{State: "OPEN", MergeStateStatus: "BLOCKED", ReviewDecision: "APPROVED"}))
 

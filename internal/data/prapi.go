@@ -18,18 +18,19 @@ import (
 
 // PR is the structured view of a single GitHub Pull Request.
 type PR struct {
-	URL              string           `json:"url"`
-	Owner            string           `json:"owner"`
-	Repo             string           `json:"repo"`
-	Number           int              `json:"number"`
-	Title            string           `json:"title,omitempty"`
-	State            string           `json:"state"`
-	MergeStateStatus string           `json:"merge_state_status,omitempty"`
-	ReviewDecision   string           `json:"review_decision,omitempty"`
-	CheckRollupState string           `json:"check_rollup_state,omitempty"`
-	IsDraft          bool             `json:"is_draft"`
-	Assignees        []string         `json:"assignees,omitempty"`
-	Queue            *MergeQueueEntry `json:"queue,omitempty"`
+	URL               string           `json:"url"`
+	Owner             string           `json:"owner"`
+	Repo              string           `json:"repo"`
+	Number            int              `json:"number"`
+	Title             string           `json:"title,omitempty"`
+	State             string           `json:"state"`
+	MergeStateStatus  string           `json:"merge_state_status,omitempty"`
+	ReviewDecision    string           `json:"review_decision,omitempty"`
+	CheckRollupState  string           `json:"check_rollup_state,omitempty"`
+	UnresolvedThreads int              `json:"unresolved_threads,omitempty"`
+	IsDraft           bool             `json:"is_draft"`
+	Assignees         []string         `json:"assignees,omitempty"`
+	Queue             *MergeQueueEntry `json:"queue,omitempty"`
 }
 
 // MergeQueueEntry models a PR's membership in GitHub's native merge queue.
@@ -109,6 +110,7 @@ const prQuery = `query ($owner:String!,$repo:String!,$num:Int!) {
       isDraft
       assignees(first:10) { nodes { login } }
       mergeQueueEntry { state position estimatedTimeToMerge }
+      reviewThreads(first:100) { nodes { isResolved } }
     }
   }
 }`
@@ -132,6 +134,11 @@ type prGQLResponse struct {
 				Position             int    `json:"position"`
 				EstimatedTimeToMerge *int   `json:"estimatedTimeToMerge"`
 			} `json:"mergeQueueEntry"`
+			ReviewThreads struct {
+				Nodes []struct {
+					IsResolved bool `json:"isResolved"`
+				} `json:"nodes"`
+			} `json:"reviewThreads"`
 		} `json:"pullRequest"`
 	} `json:"repository"`
 }
@@ -242,6 +249,11 @@ func (c *GHClient) Fetch(ctx context.Context, url string) (PR, error) {
 	}
 	for _, a := range p.Assignees.Nodes {
 		out.Assignees = append(out.Assignees, a.Login)
+	}
+	for _, t := range p.ReviewThreads.Nodes {
+		if !t.IsResolved {
+			out.UnresolvedThreads++
+		}
 	}
 	if p.MergeQueueEntry != nil {
 		entry := &MergeQueueEntry{
