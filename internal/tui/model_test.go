@@ -456,3 +456,28 @@ func TestModelSummary(t *testing.T) {
 	require.Contains(t, s, "1 merged")
 	require.Contains(t, s, "1 closed")
 }
+
+// TestVimNavigation locks in j/k moving the table cursor down/up, matching the
+// arrow keys advertised in the hint bar.
+func TestVimNavigation(t *testing.T) {
+	m := newTestModel(t, nil)
+	m.handleRowsReady(rowsReadyMsg{results: []data.Result{
+		{URL: "https://github.com/acme/api/pull/1", PR: data.PR{URL: "https://github.com/acme/api/pull/1", State: "OPEN", Title: "first"}},
+		{URL: "https://github.com/acme/api/pull/2", PR: data.PR{URL: "https://github.com/acme/api/pull/2", State: "OPEN", Title: "second"}},
+		{URL: "https://github.com/acme/api/pull/3", PR: data.PR{URL: "https://github.com/acme/api/pull/3", State: "OPEN", Title: "third"}},
+	}})
+
+	require.Equal(t, 0, m.table.Cursor())
+
+	sendKey := func(r rune) {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = updated.(*Model)
+	}
+
+	sendKey('j')
+	require.Equal(t, 1, m.table.Cursor(), "j should move cursor down")
+	sendKey('j')
+	require.Equal(t, 2, m.table.Cursor(), "j should move cursor down again")
+	sendKey('k')
+	require.Equal(t, 1, m.table.Cursor(), "k should move cursor up")
+}

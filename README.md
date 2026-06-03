@@ -19,7 +19,7 @@ open the PR in your browser.
 
 ## Features
 
-- Interactive Bubble Tea TUI with arrow nav, open / copy / delete / refresh.
+- Interactive Bubble Tea TUI with arrow/vim (j/k) nav, open / copy / delete / refresh.
 - One-shot non-interactive listing with `prowl list` (use `--json` for agents).
 - GitHub merge-queue awareness (position + ETA).
 - Lightweight archival: move merged / closed PRs out of the active list.
