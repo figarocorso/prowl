@@ -118,6 +118,8 @@ func StatusBadge(plain bool, label string) string {
 	switch label {
 	case "open":
 		return okColor.Render("🟢 open")
+	case "queued":
+		return mergedColor.Render("🚦 queued")
 	case "draft":
 		return warnColor.Render("📝 draft")
 	case "open/blocked":

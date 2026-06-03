@@ -37,6 +37,8 @@ func statusEmojiLabel(label string) string {
 	switch label {
 	case "open":
 		return "🟢 open"
+	case "queued":
+		return "🚦 queued"
 	case "draft":
 		return "📝 draft"
 	case "open/blocked":

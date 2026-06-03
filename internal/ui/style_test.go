@@ -56,7 +56,7 @@ func TestFancyMarkersNonEmptyAndContainGlyph(t *testing.T) {
 }
 
 func TestStatusBadgePlain(t *testing.T) {
-	cases := []string{"open", "draft", "open/blocked", "merged", "closed", "unknown", "error", "weird-label"}
+	cases := []string{"open", "queued", "draft", "open/blocked", "merged", "closed", "unknown", "error", "weird-label"}
 	for _, label := range cases {
 		if got := StatusBadge(true, label); got != label {
 			t.Errorf("plain badge for %q: got %q want %q", label, got, label)
@@ -65,7 +65,7 @@ func TestStatusBadgePlain(t *testing.T) {
 }
 
 func TestStatusBadgeFancyContainsLabel(t *testing.T) {
-	labels := []string{"open", "draft", "open/blocked", "merged", "closed", "unknown"}
+	labels := []string{"open", "queued", "draft", "open/blocked", "merged", "closed", "unknown"}
 	for _, label := range labels {
 		got := StatusBadge(false, label)
 		if !strings.Contains(got, label) {
