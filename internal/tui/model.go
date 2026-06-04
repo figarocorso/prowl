@@ -279,7 +279,7 @@ func (m *Model) handleKey(key string) (tea.Model, tea.Cmd, bool) {
 
 func (m *Model) handleArchiveConfirm(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "y", "Y":
+	case "y", "Y", "enter":
 		if _, err := m.store.MoveActiveToReviewed(m.pendingArchive); err != nil {
 			m.err = err.Error()
 			m.confirmArchive = false
@@ -287,7 +287,7 @@ func (m *Model) handleArchiveConfirm(key string) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, tea.Quit
-	case "n", "N", "q", "ctrl+c", "esc", "enter":
+	case "n", "N", "q", "ctrl+c", "esc":
 		return m, tea.Quit
 	}
 	return m, nil
@@ -594,7 +594,7 @@ func (m *Model) View() string {
 
 	switch {
 	case m.confirmArchive:
-		prompt := fmt.Sprintf("\n📦 Archive %d closed/merged PR(s)? [y/N]", len(m.pendingArchive))
+		prompt := fmt.Sprintf("\n📦 Archive %d closed/merged PR(s)? [Y/n]", len(m.pendingArchive))
 		b.WriteString(confirmStyle.Render(prompt))
 	case m.confirmDelete:
 		prompt := fmt.Sprintf("\n🗑  Delete %s? [y/N]", m.pendingDelete)
