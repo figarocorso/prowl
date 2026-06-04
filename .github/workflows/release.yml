@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# goreleaser-action@v6 still ships a Node 20 entrypoint. Force the runner to
+# execute JS actions on Node 24 so the deprecated-Node-20 warning goes away
+# (Node 20 is removed from runners on 2026-09-16).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
