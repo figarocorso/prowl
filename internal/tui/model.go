@@ -31,6 +31,27 @@ var (
 	confirmStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
 )
 
+// paletteCommands lists the canonical command names offered for tab-completion
+// in the slash-command palette (aliases like "stats"/"clean" are intentionally
+// omitted so completion suggests one name per action).
+var paletteCommands = []string{"add", "archive", "usage"}
+
+// paletteSuggestion returns the completion suffix for the first command whose
+// name starts with the typed input. It returns "" once a space has been typed
+// (i.e. the user has moved on to arguments) or when nothing matches.
+func paletteSuggestion(input string) string {
+	input = strings.TrimPrefix(input, "/")
+	if input == "" || strings.ContainsRune(input, ' ') {
+		return ""
+	}
+	for _, cmd := range paletteCommands {
+		if strings.HasPrefix(cmd, input) && cmd != input {
+			return cmd[len(input):]
+		}
+	}
+	return ""
+}
+
 // statusEmojiLabel returns an emoji-prefixed label for a status string,
 // without ANSI escapes so the bubbles table can truncate it correctly.
 func statusEmojiLabel(label string) string {
@@ -344,6 +365,9 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.paletteInput = string(r[:len(r)-1])
 		}
 		return m, nil
+	case tea.KeyTab:
+		m.paletteInput += paletteSuggestion(m.paletteInput)
+		return m, nil
 	case tea.KeySpace:
 		m.paletteInput += " "
 		return m, nil
@@ -600,8 +624,13 @@ func (m *Model) View() string {
 		prompt := fmt.Sprintf("\n🗑  Delete %s? [y/N]", m.pendingDelete)
 		b.WriteString(confirmStyle.Render(prompt))
 	case m.palette:
-		b.WriteString("\n" + confirmStyle.Render("/"+m.paletteInput+"▌"))
-		b.WriteString(hintStyle.Render("   (commands: add <url>, usage, archive · esc cancels)"))
+		ghost := paletteSuggestion(m.paletteInput)
+		b.WriteString("\n" + confirmStyle.Render("/"+m.paletteInput) + hintStyle.Render(ghost) + confirmStyle.Render("▌"))
+		if ghost != "" {
+			b.WriteString(hintStyle.Render("   (tab to complete · esc cancels)"))
+		} else {
+			b.WriteString(hintStyle.Render("   (commands: add <url>, usage, archive · tab completes · esc cancels)"))
+		}
 	default:
 		hints := []string{
 			keyStyle.Render("↑↓/jk") + hintStyle.Render(" nav"),
