@@ -610,12 +610,7 @@ func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
 		}
 		return m.refresh()
 	case "enter":
-		if m.tab == tabDone && m.loadMoreSelected() {
-			return m, m.loadMoreReviewed(), true
-		}
-		if url := m.selectedURL(); url != "" {
-			_ = openInBrowser(url)
-		}
+		return m.handleEnter()
 	case "down", "j":
 		if m.tab == tabDone && m.loadMoreSelected() {
 			return m, m.loadMoreReviewed(), true
@@ -624,14 +619,33 @@ func (m *Model) handleNormalKey(key string) (tea.Model, tea.Cmd, bool) {
 	case "c":
 		m.copySelectedURL()
 	case "d", "backspace", "delete":
-		if m.tab != tabActive {
-			return m, nil, true
-		}
-		if url := m.selectedURL(); url != "" {
-			m.confirmDelete = true
-			m.pendingDelete = url
-			return m, nil, true
-		}
+		return m.handleDeleteKey()
+	}
+	return m, nil, false
+}
+
+// handleEnter loads the next reviewed page when the cursor is on the "Load
+// more" sentinel, otherwise opens the selected PR in the browser.
+func (m *Model) handleEnter() (tea.Model, tea.Cmd, bool) {
+	if m.tab == tabDone && m.loadMoreSelected() {
+		return m, m.loadMoreReviewed(), true
+	}
+	if url := m.selectedURL(); url != "" {
+		_ = openInBrowser(url)
+	}
+	return m, nil, false
+}
+
+// handleDeleteKey prompts to delete the selected PR. Delete is only available
+// on the Active tab; on other tabs the key is swallowed.
+func (m *Model) handleDeleteKey() (tea.Model, tea.Cmd, bool) {
+	if m.tab != tabActive {
+		return m, nil, true
+	}
+	if url := m.selectedURL(); url != "" {
+		m.confirmDelete = true
+		m.pendingDelete = url
+		return m, nil, true
 	}
 	return m, nil, false
 }

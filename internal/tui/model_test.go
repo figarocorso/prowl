@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -480,4 +481,167 @@ func TestVimNavigation(t *testing.T) {
 	require.Equal(t, 2, m.table.Cursor(), "j should move cursor down again")
 	sendKey('k')
 	require.Equal(t, 1, m.table.Cursor(), "k should move cursor up")
+}
+
+// --- Done tab: pagination + search ---------------------------------------
+
+func doneTestModel(t *testing.T) *Model {
+	t.Helper()
+	m := newTestModel(t, nil)
+	m.tab = tabDone
+	m.width = 120
+	m.height = 30
+	return m
+}
+
+func TestMatchesQuery(t *testing.T) {
+	r := data.Result{
+		URL: "https://github.com/acme/api/pull/1235",
+		PR:  data.PR{URL: "https://github.com/acme/api/pull/1235", Title: "Refactor auth middleware"},
+	}
+	require.True(t, matchesQuery(r, "auth"))  // title
+	require.True(t, matchesQuery(r, "1235"))  // url
+	require.False(t, matchesQuery(r, "zzzz")) // no match
+	bad := data.Result{URL: "https://github.com/acme/api/pull/9", Err: errors.New("boom")}
+	require.True(t, matchesQuery(bad, "pull/9")) // url still matches on error rows
+	require.False(t, matchesQuery(bad, "auth"))  // no title to match
+}
+
+func TestPageSize(t *testing.T) {
+	m := doneTestModel(t)
+	m.height = 30
+	require.Equal(t, 20, m.pageSize()) // capped at 20
+	m.height = 15
+	require.Equal(t, 6, m.pageSize()) // visibleRows 9 - 3
+	m.height = 0
+	require.Equal(t, 2, m.pageSize()) // visibleRows floor 5 - 3
+}
+
+func TestSwitchTabInitializesDone(t *testing.T) {
+	m := newTestModel(t, nil)
+	_, cmd, handled := m.switchTab(tabDone)
+	require.True(t, handled)
+	require.NotNil(t, cmd, "first switch to Done kicks off a fetch")
+	require.True(t, m.reviewed.initialized)
+	require.Equal(t, tabDone, m.tab)
+
+	_, cmd, _ = m.switchTab(tabDone) // same tab is a no-op
+	require.Nil(t, cmd)
+
+	_, cmd, _ = m.switchTab(tabActive)
+	require.Nil(t, cmd)
+	require.Equal(t, tabActive, m.tab)
+}
+
+func TestReviewedPaginationSentinelAndLoadMore(t *testing.T) {
+	m := doneTestModel(t)
+	ctx := context.Background()
+	urls := []string{
+		"https://github.com/acme/api/pull/1234",
+		"https://github.com/acme/api/pull/1235",
+		"https://github.com/acme/api/pull/1198",
+		"https://github.com/acme/api/pull/1199",
+		"https://github.com/acme/api/pull/1200",
+	}
+
+	first := m.client.FetchBatch(ctx, urls[:3])
+	m.handleReviewedInit(reviewedInitMsg{urls: urls, results: first})
+	require.Equal(t, 3, m.reviewed.loaded)
+	require.True(t, m.hasMoreReviewed())
+	require.Len(t, m.reviewed.table.Rows(), 4, "3 rows + Load more sentinel")
+
+	m.reviewed.table.SetCursor(3) // sentinel row
+	require.True(t, m.loadMoreSelected())
+	cmd := m.loadMoreReviewed()
+	require.NotNil(t, cmd)
+	require.True(t, m.reviewed.loading)
+
+	// Drive the page fetch the way the sentinel's command would.
+	pageMsg := fetchReviewedPageCmd(m.client, urls[3:])().(reviewedPageMsg)
+	m.handleReviewedPage(pageMsg)
+	require.Equal(t, 5, m.reviewed.loaded)
+	require.False(t, m.hasMoreReviewed())
+	require.Len(t, m.reviewed.table.Rows(), 5, "all loaded, sentinel gone")
+}
+
+func TestReviewedInitError(t *testing.T) {
+	m := doneTestModel(t)
+	m.handleReviewedInit(reviewedInitMsg{err: errors.New("nope")})
+	require.Equal(t, "nope", m.reviewed.err)
+	require.False(t, m.reviewed.loading)
+}
+
+func TestSearchFiltersLoadedRowsAndEscClears(t *testing.T) {
+	m := doneTestModel(t)
+	ctx := context.Background()
+	urls := []string{
+		"https://github.com/acme/api/pull/1234", // Add /healthz endpoint
+		"https://github.com/acme/api/pull/1235", // Refactor auth middleware
+	}
+	m.handleReviewedInit(reviewedInitMsg{urls: urls, results: m.client.FetchBatch(ctx, urls)})
+	require.Len(t, m.reviewed.shown, 2)
+
+	// Search dispatched through the palette to cover the command router too.
+	m.runPaletteCommand("search AUTH") // case-insensitive
+	require.Equal(t, "AUTH", m.reviewed.query)
+	require.Len(t, m.reviewed.shown, 1)
+	require.Contains(t, m.reviewed.shown[0].URL, "1235")
+
+	_, _, handled := m.handleEsc() // clears the search
+	require.True(t, handled)
+	require.Empty(t, m.reviewed.query)
+	require.Len(t, m.reviewed.shown, 2)
+}
+
+func TestRunPaletteSearchGuards(t *testing.T) {
+	m := newTestModel(t, nil) // Active tab
+	m.runPaletteCommand("search foo")
+	require.Contains(t, m.err, "only available on the Done tab")
+
+	m.tab = tabDone
+	m.err = ""
+	m.runPaletteSearch(nil)
+	require.Contains(t, m.err, "usage")
+}
+
+func TestHandleEnterOnSentinelLoadsMore(t *testing.T) {
+	m := doneTestModel(t)
+	urls := []string{
+		"https://github.com/acme/api/pull/1234",
+		"https://github.com/acme/api/pull/1235",
+	}
+	m.handleReviewedInit(reviewedInitMsg{urls: urls, results: m.client.FetchBatch(context.Background(), urls[:1])})
+	m.reviewed.table.SetCursor(1) // sentinel
+	_, cmd, handled := m.handleEnter()
+	require.True(t, handled)
+	require.NotNil(t, cmd)
+}
+
+func TestFetchReviewedInitCmdReversesNewestFirst(t *testing.T) {
+	dir := t.TempDir()
+	s, err := store.New(filepath.Join(dir, "a.txt"), filepath.Join(dir, "r.txt"))
+	require.NoError(t, err)
+	urls := []string{
+		"https://github.com/acme/api/pull/1198",
+		"https://github.com/acme/api/pull/1199",
+		"https://github.com/acme/api/pull/1200",
+	}
+	for _, u := range urls {
+		_, err := s.Add(u)
+		require.NoError(t, err)
+	}
+	_, err = s.MoveActiveToReviewed(urls)
+	require.NoError(t, err)
+
+	mock := data.NewMockClient()
+	require.NoError(t, mock.LoadFixtures(filepath.Join("..", "..", "internal", "data", "testdata", "fixtures.json")))
+
+	msg := fetchReviewedInitCmd(s, mock, 2)().(reviewedInitMsg)
+	require.NoError(t, msg.err)
+	require.Equal(t, []string{
+		"https://github.com/acme/api/pull/1200",
+		"https://github.com/acme/api/pull/1199",
+		"https://github.com/acme/api/pull/1198",
+	}, msg.urls, "newest first")
+	require.Len(t, msg.results, 2, "only the first page is fetched")
 }
