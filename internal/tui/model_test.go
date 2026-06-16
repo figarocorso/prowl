@@ -98,7 +98,7 @@ func TestModelHeaderHasNoSideBorders(t *testing.T) {
 	var headerLine string
 	for _, ln := range strings.Split(out, "\n") {
 		trim := strings.TrimSpace(ln)
-		if strings.HasPrefix(trim, "URL") && strings.Contains(ln, "Assignee") {
+		if strings.HasPrefix(trim, "URL") && strings.Contains(ln, "Status") {
 			headerLine = ln
 			break
 		}
