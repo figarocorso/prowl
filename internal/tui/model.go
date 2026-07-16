@@ -195,7 +195,7 @@ func newPRTable() table.Model {
 	return t
 }
 
-var columnHeaders = []string{"URL", "Status", "Title"}
+var columnHeaders = []string{"URL", "Assignee", "Status", "Title"}
 
 // columnPad is the extra breathing room added to each non-Title column on top
 // of its widest cell.
@@ -1009,11 +1009,12 @@ func (m *Model) selectedURL() string {
 // declared by columnHeaders.
 func resultCells(r data.Result) []string {
 	if r.Err != nil {
-		return []string{data.ShortURL(r.URL), statusEmojiLabel("error"), "-"}
+		return []string{data.ShortURL(r.URL), "-", statusEmojiLabel("error"), "-"}
 	}
 	pr := r.PR
 	return []string{
 		data.ShortURL(pr.URL),
+		data.AssigneesLabel(pr),
 		statusEmojiLabel(data.StatusLabel(pr)),
 		pr.Title,
 	}
