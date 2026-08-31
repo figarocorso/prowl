@@ -155,7 +155,7 @@ jobs:
         with:
           fetch-depth: 2
 
-      - uses: fgrosse/go-coverage-report@v1.2.0
+      - uses: fgrosse/go-coverage-report@v1.3.1
         with:
           coverage-artifact-name: code-coverage
           coverage-file-name: coverage.out
